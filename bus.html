@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Metro Dash — Endless Runner (inspired Subway Surfers)</title>
+<style>
+  :root{--bg:#87ceeb;--track:#e6e6e6;--accent:#ff6b6b}
+  *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  body{margin:0;background:linear-gradient(#a6e1ff,#6cc0ff);display:flex;align-items:center;justify-content:center;height:100vh}
+  .wrap{width:100%;max-width:1024px;padding:12px}
+  canvas{width:100%;height:auto;background:linear-gradient(#bfe9ff,#8fd7ff);display:block;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.18)}
+  .ui{display:flex;justify-content:space-between;align-items:center;margin:10px 0;color:#034}
+  .btn{padding:8px 10px;border-radius:8px;border:0;background:#045;color:#fff;cursor:pointer}
+  .muted{color:#053}
+  .hint{font-size:13px;color:#053}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="ui">
+      <div><strong>Metro Dash</strong> — Endless Runner (bukan Subway Surfers)</div>
+      <div><button id="restart" class="btn">Restart</button> <span class="muted">Score: <span id="score">0</span></span></div>
+    </div>
+    <canvas id="game" width="900" height="520"></canvas>
+    <p class="hint">Kontrol: ←/→ atau geser/ketat layar (mobile). Tombol Atas = lompat, Bawah = slide. Kumpulkan koin, hindari rintangan!</p>
+  </div>
+<script>
+/* Metro Dash - simple single-file endless runner
+   - 3 lane running (kiri-tengah-kanan)
+   - keyboard + touch swipe controls
+   - coins, obstacles, powerups (magnet, double score)
+   - speed increases over time
+   - localStorage best score
+   - ready to host on GitHub Pages
+*/
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const scoreEl = document.getElementById('score');
+const restartBtn = document.getElementById('restart');
+
+// Game settings
+const LANES = 3;
+const LANE_X = [W*0.22, W*0.5, W*0.78];
+const GROUND_Y = H - 110;
+
+let state = {
+  running: true,
+  speed: 4,
+  distance: 0,
+  score: 0,
+  best: 0,
+  playerLane: 1,
+  playerY: GROUND_Y,
+  playerVy: 0,
+  playerH: 64,
+  playerW: 40,
+  isJumping: false,
+  isSliding: false,
+  slideTimer: 0,
+  obstacles: [],
+  coins: [],
+  powerups: [],
+  spawnTimer: 0,
+  obstacleFreq: 90, // lower -> more frequent
+  time: 0,
+  magnet: 0, // frames left
+  doubleScore: 0
+};
+
+// Load best score
+try{ state.best = Number(localStorage.getItem('metro.best')||0); }catch(e){}
+
+// Basic sound (optional) - WebAudio
+let audioCtx = null; function sfx(freq,dur=0.08,vol=0.05){ if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.type='sine'; o.frequency.value=freq; o.connect(g); g.connect(audioCtx.destination); g.gain.value = vol; o.start(); o.stop(audioCtx.currentTime + dur); }
+
+// Player rectangle
+function drawPlayer(){
+  const cx = LANE_X[state.playerLane];
+  const py = state.playerY - state.playerH;
+  ctx.save();
+  ctx.translate(cx - state.playerW/2, py);
+  // body
+  ctx.fillStyle = '#222'; ctx.fillRect(0,0,state.playerW,state.playerH);
+  // cap
+  ctx.fillStyle='#f04'; ctx.fillRect(0,0,state.playerW,12);
+  // face
+  ctx.fillStyle='#ffd9b3'; ctx.fillRect(8,12,24,18);
+  // sliding visual
+  if(state.isSliding){ ctx.fillStyle='rgba(0,0,0,0.12)'; ctx.fillRect(-6,state.playerH-18, state.playerW+12,12); }
+  ctx.restore();
+}
+
+function spawnObstacle(){
+  const lane = Math.floor(Math.random()*LANES);
+  const type = Math.random()<0.12 ? 'power' : 'obstacle';
+  const x = W + 60;
+  if(type==='obstacle'){
+    const h = 40 + Math.round(Math.random()*40);
+    state.obstacles.push({x, lane, w:40, h, passed:false});
+  } else {
+    const kind = Math.random()<0.6 ? 'coin' : (Math.random()<0.5?'magnet':'double');
+    if(kind==='coin') state.coins.push({x, lane, r:10, collected:false});
+    else state.powerups.push({x, lane, kind, ttl:800});
+  }
+}
+
+function update(){
+  if(!state.running) return;
+  state.time++;
+  state.distance += state.speed * 0.02;
+  state.spawnTimer++;
+  // spawn logic adapt
+  const freq = Math.max(28, state.obstacleFreq - Math.floor(state.distance/50));
+  if(state.spawnTimer > freq){ spawnObstacle(); state.spawnTimer=0; }
+
+  // player physics
+  if(state.isJumping){ state.playerVy += 0.32; state.playerY += state.playerVy; if(state.playerY >= GROUND_Y){ state.playerY = GROUND_Y; state.isJumping=false; state.playerVy=0; } }
+  if(state.isSliding){ state.slideTimer--; if(state.slideTimer<=0) state.isSliding=false; }
+
+  // move obstacles & coins & powerups
+  const move = state.speed + Math.floor(state.distance/100);
+  state.obstacles.forEach(o=>{o.x -= move;});
+  state.coins.forEach(c=>c.x -= move);
+  state.powerups.forEach(p=>p.x -= move);
+
+  // collect coins
+  state.coins.forEach(c=>{
+    if(c.collected) return;
+    const px = LANE_X[c.lane];
+    const py = GROUND_Y - 24;
+    const dx = Math.abs(c.x - px);
+    const dy = Math.abs(py - (state.playerY - state.playerH/2));
+    if(dx < 40 && dy < 44){ c.collected=true; const gain = state.doubleScore>0? 20:10; state.score += gain; sfx(1100,0.04); }
+    // magnet effect
+    if(state.magnet>0){ if(Math.abs(c.x - px) < 220){ c.x += (px - c.x) * 0.08; } }
+  });
+
+  // powerup pickup
+  state.powerups.forEach(p=>{
+    const px = LANE_X[p.lane]; if(Math.abs(p.x - px) < 40){ if(p.kind==='magnet'){ state.magnet = 900; log('Magnet picked'); } else if(p.kind==='double'){ state.doubleScore = 900; log('Double score picked'); } p.used=true; sfx(800,0.06); }
+  });
+
+  // collision check with obstacles
+  for(let i=state.obstacles.length-1;i>=0;i--){ const o=state.obstacles[i]; const px = LANE_X[o.lane]; const py = GROUND_Y - o.h; const playerRect = {x:LANE_X[state.playerLane]-state.playerW/2,y:state.playerY-state.playerH,w:state.playerW,h:state.playerH}; const obsRect = {x:o.x-20,y:py,w:o.w,h:o.h}; if(rectInter(playerRect, obsRect)){
+      // if sliding and obstacle low -> pass
+      if(state.isSliding && o.h <= 50){ state.score += 0; state.obstacles.splice(i,1); sfx(500,0.06); }
+      else if(state.isJumping && (playerRect.y + playerRect.h - obsRect.y) < 18){ // stomp-like
+        state.score += 30; state.obstacles.splice(i,1); sfx(1200,0.06);
+      } else { // hit -> game over
+        sfx(160,0.2); gameOver(); return; }
+    }
+    // remove offscreen
+    if(o.x < -100) state.obstacles.splice(i,1);
+  }
+
+  // remove collected/used
+  state.coins = state.coins.filter(c=>!c.collected && c.x > -60);
+  state.powerups = state.powerups.filter(p=>!p.used && p.x > -80);
+
+  // update power timers
+  if(state.magnet>0) state.magnet--;
+  if(state.doubleScore>0) state.doubleScore--;
+
+  // increase score by distance
+  state.score += Math.floor(state.speed * 0.03);
+  scoreEl.textContent = state.score;
+
+  // increase speed slowly
+  if(state.time % 600 === 0) state.speed += 0.6;
+}
+
+function rectInter(a,b){ return !(a.x + a.w <= b.x || a.x >= b.x + b.w || a.y + a.h <= b.y || a.y >= b.y + b.h); }
+
+function draw(){
+  // clear
+  ctx.clearRect(0,0,W,H);
+  // draw tracks
+  ctx.fillStyle = '#e9f0f8'; ctx.fillRect(0,GROUND_Y+state.playerH, W, H - GROUND_Y);
+  // rail marks
+  for(let i=0;i<LANES;i++){
+    const x = LANE_X[i]; ctx.fillStyle = '#d0e9ff'; ctx.fillRect(x-110, GROUND_Y+state.playerH+8, 220, 8);
+  }
+
+  // draw obstacles
+  ctx.save(); ctx.translate(0,0);
+  state.obstacles.forEach(o=>{
+    const x = o.x; const y = GROUND_Y - o.h; ctx.fillStyle = '#7b3'; ctx.fillRect(x-20,y,o.w,o.h);
+    ctx.fillStyle='#4d2'; ctx.fillRect(x-20,y,o.w,6);
+  });
+  state.coins.forEach(c=>{
+    const x = c.x; const y = GROUND_Y - 24; ctx.fillStyle='gold'; ctx.beginPath(); ctx.ellipse(x,y,c.r,c.r,0,0,Math.PI*2); ctx.fill(); });
+  state.powerups.forEach(p=>{
+    const x = p.x; const y = GROUND_Y - 44; ctx.fillStyle = p.kind==='magnet' ? '#f0a' : '#66f'; ctx.fillRect(x-12,y-12,24,24); ctx.fillStyle='#fff'; ctx.fillText(p.kind==='magnet'?'M':'2x', x-8, y+4);
+  });
+
+  // draw player
+  drawPlayer();
+
+  // HUD - status powerups
+  ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fillRect(10,10,220,56);
+  ctx.fillStyle='#034'; ctx.font='16px monospace'; ctx.fillText('Score: '+state.score, 18,32);
+  ctx.fillText('Best: '+state.best, 18,52);
+  if(state.magnet>0) { ctx.fillStyle='#f04'; ctx.fillText('Magnet', 260,32); }
+  if(state.doubleScore>0){ ctx.fillStyle='#f80'; ctx.fillText('Double', 360,32); }
+}
+
+function gameOver(){
+  state.running = false;
+  if(state.score > state.best){ state.best = state.score; localStorage.setItem('metro.best', state.best); }
+  setTimeout(()=>{ if(confirm('Game Over! Score: '+state.score+'\nRestart?')) restart(); },100);
+}
+
+function restart(){
+  state.running = true; state.speed = 4; state.distance=0; state.score=0; state.playerLane=1; state.playerY=GROUND_Y; state.playerVy=0; state.isJumping=false; state.isSliding=false; state.obstacles=[]; state.coins=[]; state.powerups=[]; state.spawnTimer=0; state.time=0; state.magnet=0; state.doubleScore=0; scoreEl.textContent = 0; }
+
+restartBtn.addEventListener('click', ()=> restart());
+
+// Input: keyboard
+window.addEventListener('keydown', e=>{
+  if(!state.running) return;
+  if(e.key === 'ArrowLeft' || e.key === 'a'){ state.playerLane = Math.max(0, state.playerLane-1); sfx(600,0.03); }
+  if(e.key === 'ArrowRight' || e.key === 'd'){ state.playerLane = Math.min(LANES-1, state.playerLane+1); sfx(600,0.03); }
+  if(e.key === 'ArrowUp' || e.key === 'w' || e.key === ' '){ if(!state.isJumping && !state.isSliding){ state.isJumping=true; state.playerVy = -8.8; sfx(1200,0.06); } }
+  if(e.key === 'ArrowDown' || e.key === 's'){ if(!state.isSliding && !state.isJumping){ state.isSliding=true; state.slideTimer=40; sfx(400,0.05); } }
+});
+
+// Touch swipe for mobile
+let touchStart = null; window.addEventListener('touchstart', e=>{ if(!e.touches) return; const t = e.touches[0]; touchStart = {x:t.clientX, y:t.clientY, t:Date.now()}; });
+window.addEventListener('touchend', e=>{ if(!touchStart) return; const t = e.changedTouches[0]; const dx = t.clientX - touchStart.x; const dy = t.clientY - touchStart.y; const adx = Math.abs(dx); const ady = Math.abs(dy); if(Math.max(adx,ady) < 30) return; if(adx > ady){ if(dx>0) { state.playerLane = Math.min(LANES-1, state.playerLane+1); sfx(600,0.03);} else { state.playerLane = Math.max(0, state.playerLane-1); sfx(600,0.03);} } else { if(dy < 0){ if(!state.isJumping && !state.isSliding){ state.isJumping=true; state.playerVy = -8.8; sfx(1200,0.06); } } else { if(!state.isSliding && !state.isJumping){ state.isSliding=true; state.slideTimer=40; sfx(400,0.05); } } } touchStart = null; });
+
+// simple log
+function log(msg){ console.log('[Metro] '+msg); }
+
+// main loop
+let last = performance.now(); function loop(now){ const dt = (now - last)/16.666; last = now; update(dt); draw(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>
