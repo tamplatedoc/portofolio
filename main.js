@@ -136,7 +136,7 @@ scene.add(ground);
 const loader = new GLTFLoader();
 
 function loadModels() {
-    const modelsToLoad = ['jagung.gltf', 'padi.gltf'];
+    const modelsToLoad = ['jagung.gltf', 'padi.gltf', 'townhall.gltf'];
     let modelsLoaded = 0;
 
     modelsToLoad.forEach(modelName => {
