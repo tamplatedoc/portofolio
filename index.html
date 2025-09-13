@@ -3,180 +3,231 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pahlawan Ahmad Fahril - Petualangan Elektronika & IOT</title>
+    <title>Petualangan Farming</title>
     
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
         body {
-            background-color: #213123;
+            background-color: #2e3b2e;
             color: #a4a956;
             font-family: 'Press Start 2P', cursive;
             text-align: center;
             margin: 0;
             padding: 20px;
-            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
-        /* Mengimpor font dari Google Fonts */
-        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
-        /* Tampilan Header ala Game HUD */
-        .game-hud {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px;
-            border: 2px solid #a4a956;
-            background-color: #2e3b2e;
+        .game-container {
+            border: 5px solid #a4a956;
+            padding: 20px;
+            background-color: #5d6700;
+            box-shadow: 10px 10px 0px 0px #1e251e;
+            max-width: 800px;
+            width: 90%;
             margin-bottom: 20px;
         }
 
-        .health-bar, .player-info {
-            font-size: 14px;
+        .hud {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #a4a956;
+            padding-bottom: 10px;
+        }
+
+        .resource {
+            font-size: 1.2rem;
         }
         
-        /* Gaya Dialog Box */
-        .dialog-box {
-            border: 3px solid #a4a956;
-            background-color: #2e3b2e;
-            padding: 20px;
-            margin: 20px auto;
-            max-width: 600px;
-            position: relative;
-            box-shadow: 5px 5px 0px 0px #1e251e;
+        .farm {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
         }
-        
-        /* Tombol Mulai */
-        .start-button {
+
+        .plot {
+            width: 80px;
+            height: 80px;
+            background-color: #213123;
+            border: 2px solid #a4a956;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            text-shadow: 1px 1px #1e251e;
+        }
+
+        .plot.corn { background-color: #925f20; }
+        .plot.rice { background-color: #64814d; }
+        .plot.wheat { background-color: #a37b3b; }
+
+        button {
             background-color: #5d6700;
             color: #a4a956;
             border: 2px solid #a4a956;
-            padding: 10px 20px;
+            padding: 10px 15px;
             font-family: 'Press Start 2P', cursive;
             cursor: pointer;
+            margin: 5px;
             box-shadow: 3px 3px 0px 0px #313300;
         }
 
-        /* Pohon Kemampuan */
-        .skill-tree-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 20px;
+        button:hover {
+            background-color: #7c8800;
+        }
+
+        .message {
             margin-top: 20px;
-        }
-
-        .skill-node {
-            border: 2px solid #a4a956;
-            padding: 10px;
-        }
-
-        .skill-node img {
-            max-width: 64px;
-            height: auto;
-        }
-        
-        /* Progres Bar */
-        .progress-bar {
-            background-color: #5d6700;
-            border: 1px solid #a4a956;
-            height: 15px;
-            margin-top: 5px;
-        }
-
-        .progress {
-            height: 100%;
-            background-color: #a4a956;
+            min-height: 25px;
         }
         
         .hidden {
             display: none;
         }
-
-        /* Gaya responsif */
-        @media (max-width: 600px) {
-            .game-hud {
-                flex-direction: column;
-                align-items: center;
-            }
-            .dialog-box {
-                padding: 15px;
-            }
-            .skill-tree-grid {
-                grid-template-columns: 1fr;
-            }
-        }
     </style>
 </head>
 <body>
 
-    <header>
-        <div class="game-hud">
-            <div class="health-bar">
-                <p>Level: 5</p>
-                <div class="bar"></div>
-            </div>
-            <div class="player-info">
-                <p>Pahlawan: Fahril</p>
-            </div>
+    <div class="game-container">
+        <h1>Petualangan Farming</h1>
+        
+        <div class="hud">
+            <div class="resource">Beras: <span id="beras-count">0</span></div>
+            <div class="resource">Jagung: <span id="jagung-count">0</span></div>
+            <div class="resource hidden" id="gandum-display">Gandum: <span id="gandum-count">0</span></div>
+            <div class="resource">Level: <span id="level">1</span></div>
         </div>
-    </header>
 
-    <main>
-        <section id="intro">
-            <div class="dialog-box">
-                <p>Misi dimulai! Pahlawan Ahmad Fahril, bersiaplah untuk petualangan di dunia elektronika dan IoT!</p>
-                <img src="https://i.ibb.co/kH2qJ8N/pahlawan.gif" alt="Karakter Pahlawan">
+        <div class="farm" id="farm-plots">
             </div>
-            <button class="start-button">Mulai Petualangan</button>
-        </section>
 
-        <section id="skills" class="hidden">
-            <h2>Pohon Kemampuan (Skill Tree)</h2>
-            <div class="skill-tree-grid">
-                <div class="skill-node">
-                    <img src="https://i.ibb.co/3k5J0yV/icon-arduino.png" alt="Arduino">
-                    <p>Arduino</p>
-                    <div class="progress-bar">
-                        <div class="progress" style="width: 90%;"></div>
-                    </div>
-                </div>
-                <div class="skill-node">
-                    <img src="https://i.ibb.co/Qd5mK2r/icon-python.png" alt="Python">
-                    <p>Python</p>
-                    <div class="progress-bar">
-                        <div class="progress" style="width: 70%;"></div>
-                    </div>
-                </div>
-                </div>
-        </section>
-
-        <section id="projects" class="hidden">
-            <h2>Misi yang Selesai</h2>
-            <div class="project-list">
-                <div class="project-item">
-                    <h3>Misi: Membangun Sistem Smart Home</h3>
-                    <p>Mendapatkan hadiah: +200 XP untuk C++, +150 XP untuk IoT Security.</p>
-                </div>
-                </div>
-        </section>
-    </main>
-
-    <footer>
-        <p>Hubungi Pahlawan: <a href="mailto:fahril@email.com">Kirim Pesan</a></p>
-    </footer>
+        <div class="actions">
+            <button onclick="buyPlot('jagung')">Beli Petak Jagung (2 Beras)</button>
+            <button onclick="buyPlot('beras')">Beli Petak Beras (2 Jagung)</button>
+            <button onclick="buyPlot('gandum')" id="gandum-button" class="hidden">Beli Petak Gandum (3 Beras, 3 Jagung)</button>
+            <button onclick="upgradeTownHall()">Town Hall (10 Beras, 10 Jagung)</button>
+        </div>
+        
+        <div class="message" id="game-message"></div>
+    </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const startButton = document.querySelector('.start-button');
-            const introSection = document.getElementById('intro');
-            const skillsSection = document.getElementById('skills');
-            const projectsSection = document.getElementById('projects');
+        let resources = {
+            beras: 0,
+            jagung: 0,
+            gandum: 0
+        };
+        
+        let plots = {
+            beras: 1,
+            jagung: 1,
+            gandum: 0
+        };
+        
+        let level = 1;
+        
+        const costs = {
+            'jagung': { beras: 2 },
+            'beras': { jagung: 2 },
+            'gandum': { beras: 3, jagung: 3 }
+        };
+        
+        const upgradeCost = {
+            level1: { beras: 10, jagung: 10 }
+        };
 
-            startButton.addEventListener('click', () => {
-                // Sembunyikan intro dan tampilkan konten lainnya
-                introSection.classList.add('hidden');
-                skillsSection.classList.remove('hidden');
-                projectsSection.classList.remove('hidden');
-            });
-        });
+        const elements = {
+            berasCount: document.getElementById('beras-count'),
+            jagungCount: document.getElementById('jagung-count'),
+            gandumCount: document.getElementById('gandum-count'),
+            gandumDisplay: document.getElementById('gandum-display'),
+            gandumButton: document.getElementById('gandum-button'),
+            levelDisplay: document.getElementById('level'),
+            farmPlots: document.getElementById('farm-plots'),
+            gameMessage: document.getElementById('game-message')
+        };
+
+        function updateUI() {
+            elements.berasCount.textContent = resources.beras;
+            elements.jagungCount.textContent = resources.jagung;
+            elements.gandumCount.textContent = resources.gandum;
+            elements.levelDisplay.textContent = level;
+
+            elements.farmPlots.innerHTML = '';
+            for (let i = 0; i < plots.jagung; i++) {
+                elements.farmPlots.innerHTML += `<div class="plot corn">JAGUNG</div>`;
+            }
+            for (let i = 0; i < plots.beras; i++) {
+                elements.farmPlots.innerHTML += `<div class="plot rice">BERAS</div>`;
+            }
+            for (let i = 0; i < plots.gandum; i++) {
+                elements.farmPlots.innerHTML += `<div class="plot wheat">GANDUM</div>`;
+            }
+        }
+
+        function showMessage(msg) {
+            elements.gameMessage.textContent = msg;
+            setTimeout(() => {
+                elements.gameMessage.textContent = '';
+            }, 3000);
+        }
+
+        function harvest() {
+            resources.beras += plots.beras;
+            resources.jagung += plots.jagung;
+            resources.gandum += plots.gandum;
+            showMessage(`Panen! Anda mendapatkan ${plots.beras} beras dan ${plots.jagung} jagung.`);
+            updateUI();
+        }
+
+        function buyPlot(type) {
+            const cost = costs[type];
+            let canBuy = true;
+            for (const res in cost) {
+                if (resources[res] < cost[res]) {
+                    canBuy = false;
+                    showMessage(`${res} tidak cukup!`);
+                    break;
+                }
+            }
+
+            if (canBuy) {
+                for (const res in cost) {
+                    resources[res] -= cost[res];
+                }
+                plots[type]++;
+                showMessage(`Berhasil membeli petak ${type}!`);
+                updateUI();
+            }
+        }
+
+        function upgradeTownHall() {
+            if (level === 1) {
+                if (resources.beras >= upgradeCost.level1.beras && resources.jagung >= upgradeCost.level1.jagung) {
+                    resources.beras -= upgradeCost.level1.beras;
+                    resources.jagung -= upgradeCost.level1.jagung;
+                    level = 2;
+                    showMessage("Town Hall di-upgrade ke Level 2! Gandum sekarang tersedia!");
+                    elements.gandumDisplay.classList.remove('hidden');
+                    elements.gandumButton.classList.remove('hidden');
+                    updateUI();
+                } else {
+                    showMessage("Sumber daya tidak cukup untuk Town Hall Level 2!");
+                }
+            } else {
+                showMessage("Town Hall sudah mencapai level maksimum.");
+            }
+        }
+        
+        // Timer panen setiap 1 menit (60000ms)
+        setInterval(harvest, 60000);
+
+        // Inisialisasi tampilan awal
+        updateUI();
     </script>
 </body>
 </html>
