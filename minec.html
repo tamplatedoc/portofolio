@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Voxel Builder — Bangun Rumah dengan Balok (mini-Minecraft)</title>
+<style>
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:linear-gradient(#e7f5ff,#dff7ee)}
+  #wrap{max-width:1200px;margin:12px auto;padding:12px}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  canvas{width:100%;height:72vh;display:block;border-radius:8px;background:#87ceeb}
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .palette{display:flex;gap:6px}
+  .color{width:34px;height:34px;border-radius:6px;border:2px solid rgba(0,0,0,0.12);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  button{padding:8px 10px;border-radius:8px;border:0;background:#2b8e2b;color:#fff;cursor:pointer}
+  button.secondary{background:#ccc;color:#111}
+  .info{font-size:13px;color:#154}
+  .sidebar{display:flex;gap:8px;align-items:center}
+  .small{font-size:13px;color:#245}
+  .footer{margin-top:8px;color:#235;font-size:13px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <header>
+    <h1>Voxel Builder — Bangun Rumah dengan Balok</h1>
+    <div class="controls">
+      <div class="palette" id="palette"></div>
+      <button id="undoBtn" class="secondary">Undo</button>
+      <button id="saveBtn">Simpan</button>
+      <button id="loadBtn" class="secondary">Muat</button>
+      <button id="exportBtn" class="secondary">Export JSON</button>
+      <div class="info small">Klik = taruh balok, Shift+klik = hapus. Scroll = zoom. WASD atau pan drag untuk kamera.</div>
+    </div>
+  </header>
+
+  <canvas id="c"></canvas>
+  <div class="footer">Tips: tekan angka 1-6 untuk memilih warna cepat. Tekan G untuk toggle grid. World max 50×50×20.</div>
+</div>
+
+<!-- Three.js dari CDN -->
+<script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
+<script>
+// Voxel Builder - single-file
+// Fitur:
+// - 3D grid world (voxel) dengan Three.js
+// - Letak/hapus blok dengan mouse (raycast)
+// - Palet warna, undo, save/load (localStorage), export JSON
+// - Simple grid snapping, max world bounds
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth*0.98, window.innerHeight*0.72);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xaeddff);
+
+const camera = new THREE.PerspectiveCamera(50, canvas.clientWidth / canvas.clientHeight, 0.1, 2000);
+camera.position.set(30, 40, 60);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(16, 0, 16);
+controls.enableDamping = true;
+controls.dampingFactor = 0.1;
+controls.screenSpacePanning = false;
+
+// Lights
+const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
+hemi.position.set(0, 200, 0); scene.add(hemi);
+const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(-50,100,-50); scene.add(dir);
+
+// Ground grid
+const GRID_W = 50, GRID_H = 50; // ground grid size
+const WORLD_MAX_HEIGHT = 20;
+
+const gridHelper = new THREE.GridHelper(GRID_W, GRID_W, 0x888888, 0xdddddd);
+gridHelper.position.set((GRID_W-1)/2, 0, (GRID_H-1)/2);
+scene.add(gridHelper);
+let gridVisible = true;
+
+// voxel storage map: key = "x,y,z" -> mesh
+const voxels = new Map();
+const undoStack = [];
+
+// materials cache per color
+const materials = {};
+
+function materialFor(color){ if(materials[color]) return materials[color]; const m = new THREE.MeshStandardMaterial({color:new THREE.Color(color), metalness:0.1, roughness:0.7}); materials[color]=m; return m; }
+
+// palette colors
+const paletteColors = ['#f94144','#f3722c','#f9c74f','#90be6d','#43aa8b','#577590'];
+const paletteEl = document.getElementById('palette');
+let selectedColor = paletteColors[0];
+
+paletteColors.forEach((c,i)=>{
+  const d = document.createElement('div'); d.className='color'; d.style.background=c; d.title = c; d.tabIndex=0;
+  d.addEventListener('click', ()=>{ selectedColor = c; highlightSelection(); });
+  paletteEl.appendChild(d);
+});
+function highlightSelection(){ Array.from(paletteEl.children).forEach((el,idx)=>{ el.style.transform = paletteColors[idx]===selectedColor ? 'scale(1.06) translateY(-2px)' : 'none'; el.style.boxShadow = paletteColors[idx]===selectedColor ? '0 6px 18px rgba(0,0,0,0.2)' : 'none'; }); }
+highlightSelection();
+
+// box geometry (unit cube)
+const boxGeom = new THREE.BoxGeometry(1,1,1);
+
+// helper to add voxel at integer coords
+function addVoxel(x,y,z,color,record=true){
+  const key = `${x},${y},${z}`;
+  if(y < 0 || y >= WORLD_MAX_HEIGHT) return;
+  if(voxels.has(key)) return; // occupied
+  const mesh = new THREE.Mesh(boxGeom, materialFor(color));
+  mesh.position.set(x, y+0.5, z);
+  mesh.userData = {x,y,z,color};
+  scene.add(mesh);
+  voxels.set(key, mesh);
+  if(record) undoStack.push({action:'add',key,color});
+}
+
+function removeVoxel(key, record=true){
+  const m = voxels.get(key); if(!m) return;
+  const data = m.userData;
+  scene.remove(m);
+  voxels.delete(key);
+  if(record) undoStack.push({action:'remove',key,color:data.color});
+}
+
+// Create initial flat ground slight (not filled with voxels) but allow building on it
+// We'll place a small starter platform
+for(let x=12;x<20;x++){ for(let z=12; z<20; z++){ addVoxel(x,0,z,'#90be6d', false); } }
+
+// raycaster for mouse interactions
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function getIntersect(evt){
+  const rect = renderer.domElement.getBoundingClientRect();
+  const x = ((evt.clientX - rect.left) / rect.width) * 2 - 1;
+  const y = - ((evt.clientY - rect.top) / rect.height) * 2 + 1;
+  mouse.set(x,y);
+  ray.setFromCamera(mouse, camera);
+  // intersect all voxel meshes + ground plane
+  const objects = Array.from(voxels.values());
+  const intersects = ray.intersectObjects(objects, false);
+  return intersects[0] || null;
+}
+
+// Also intersect ground plane
+const plane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+
+function worldPointFromEvent(evt){
+  const rect = renderer.domElement.getBoundingClientRect();
+  const x = ((evt.clientX - rect.left) / rect.width) * 2 - 1;
+  const y = - ((evt.clientY - rect.top) / rect.height) * 2 + 1;
+  mouse.set(x,y);
+  ray.setFromCamera(mouse, camera);
+  const intersect = new THREE.Vector3();
+  ray.ray.intersectPlane(plane, intersect);
+  return intersect;
+}
+
+// place/remove on click
+renderer.domElement.addEventListener('pointerdown', (e)=>{
+  if(e.button !== 0) return; // left only
+  const isRemove = e.shiftKey;
+  const hit = getIntersect(e);
+  if(hit){
+    // hit existing voxel: if remove -> remove that voxel; else place adjacent in normal direction
+    const hx = Math.floor(hit.object.userData.x);
+    const hy = Math.floor(hit.object.userData.y);
+    const hz = Math.floor(hit.object.userData.z);
+    if(isRemove){ removeVoxel(`${hx},${hy},${hz}`); }
+    else {
+      const n = hit.face.normal; // normal points outward
+      const nx = hx + n.x; const ny = hy + n.y; const nz = hz + n.z;
+      // clamp bounds
+      if(nx<0||nx>=GRID_W||nz<0||nz>=GRID_H||ny<0||ny>=WORLD_MAX_HEIGHT) return;
+      addVoxel(nx,ny,nz,selectedColor);
+    }
+  } else {
+    // no voxel clicked: place on ground at mouse position
+    const p = worldPointFromEvent(e);
+    if(!p) return;
+    const gx = Math.floor(p.x + 0.5);
+    const gz = Math.floor(p.z + 0.5);
+    const gy = 0; // ground level
+    if(gx<0||gx>=GRID_W||gz<0||gz>=GRID_H) return;
+    if(isRemove){ // remove top voxel at that column
+      // find highest voxel at gx,gz
+      for(let y=WORLD_MAX_HEIGHT-1;y>=0;y--){ const key = `${gx},${y},${gz}`; if(voxels.has(key)){ removeVoxel(key); break; } }
+    } else {
+      // place on top of column
+      let top = -1; for(let y=0;y<WORLD_MAX_HEIGHT;y++){ if(voxels.has(`${gx},${y},${gz}`)) top = y; }
+      const placeY = Math.max(0, top+1);
+      addVoxel(gx, placeY, gz, selectedColor);
+    }
+  }
+});
+
+// simple undo
+document.getElementById('undoBtn').addEventListener('click', ()=>{
+  const op = undoStack.pop(); if(!op) return; if(op.action==='add') removeVoxel(op.key, false); else if(op.action==='remove'){
+    const [x,y,z] = op.key.split(',').map(Number); addVoxel(x,y,z,op.color, false);
+  }
+});
+
+// Save / Load
+function saveScene(){
+  const arr = [];
+  for(const [k, m] of voxels.entries()){ arr.push(Object.assign({}, m.userData)); }
+  localStorage.setItem('voxel.save', JSON.stringify(arr)); alert('Tersimpan ke localStorage ('+arr.length+' blok)'); }
+function loadScene(){
+  const raw = localStorage.getItem('voxel.save'); if(!raw){ alert('Tidak ada save'); return; }
+  // clear
+  for(const k of Array.from(voxels.keys())) removeVoxel(k, false);
+  const arr = JSON.parse(raw);
+  arr.forEach(b=> addVoxel(b.x,b.y,b.z,b.color,false)); alert('Muat selesai — '+arr.length+' blok'); }
+
+document.getElementById('saveBtn').addEventListener('click', saveScene);
+document.getElementById('loadBtn').addEventListener('click', loadScene);
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const arr = [];
+  for(const [k,m] of voxels.entries()) arr.push(m.userData);
+  const blob = new Blob([JSON.stringify(arr)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'voxel-export.json'; a.click(); URL.revokeObjectURL(url);
+});
+
+// keyboard shortcuts
+window.addEventListener('keydown', (e)=>{
+  if(e.key >= '1' && e.key <= '6'){ const idx = Number(e.key)-1; selectedColor = paletteColors[idx] || selectedColor; highlightSelection(); }
+  if(e.key === 'g' || e.key === 'G'){ gridVisible = !gridVisible; gridHelper.visible = gridVisible; }
+});
+
+// resize handling
+window.addEventListener('resize', ()=>{ renderer.setSize(window.innerWidth*0.98, window.innerHeight*0.72); camera.aspect = canvas.clientWidth / canvas.clientHeight; camera.updateProjectionMatrix(); });
+
+// Animate
+function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+animate();
+
+</script>
+</body>
+</html>
