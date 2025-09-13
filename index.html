@@ -288,25 +288,33 @@
             });
         }
 
-        function add3DPlot(type) {
-            if (plotCounter < plotPositions.length) {
-                let model;
-                const modelKey = type === 'beras' ? 'padi' : type;
-                if (loadedModels[modelKey]) {
-                    model = loadedModels[modelKey].clone();
-                } else {
-                    console.warn(`Model untuk ${modelKey} belum dimuat.`);
-                    return;
-                }
+        // main.js - di dalam fungsi add3DPlot()
 
-                const pos = plotPositions[plotCounter];
-                model.position.set(pos.x, pos.y, pos.z);
-                model.scale.set(0.1, 0.1, 0.1); // Sesuaikan skala jika model terlalu besar/kecil
-
-                scene.add(model);
-                plotCounter++;
-            }
+function add3DPlot(type) {
+    if (plotCounter < plotPositions.length) {
+        let model;
+        const modelKey = type === 'beras' ? 'padi' : type;
+        if (loadedModels[modelKey]) {
+            model = loadedModels[modelKey].clone();
+        } else {
+            console.warn(`Model untuk ${modelKey} belum dimuat.`);
+            return;
         }
+
+        const pos = plotPositions[plotCounter];
+        model.position.set(pos.x, pos.y, pos.z);
+
+        // --- Perbaiki skala di sini ---
+        // Coba perbesar skala menjadi 100x lipat untuk memastikan terlihat
+        model.scale.set(100, 100, 100); 
+
+        // --- Cek di konsol untuk melihat nilai skala awal ---
+        console.log(`Menambahkan model ${modelKey}. Posisi:`, model.position, `Skala:`, model.scale);
+
+        scene.add(model);
+        plotCounter++;
+    }
+}
 
         function initializeGame() {
             add3DPlot('jagung');
