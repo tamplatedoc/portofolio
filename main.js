@@ -1,7 +1,3 @@
-// main.js
-
-// Impor Three.js dan OrbitControls
-
 // ====== IMPOR LIBRARY =======
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js';
@@ -38,6 +34,7 @@ for (let i = 0; i < 5; i++) {
     }
 }
 let plotCounter = 0;
+const loadedModels = {}; // Untuk menyimpan model yang sudah dimuat
 
 // ====== LOGIKA GAME =======
 window.buyPlot = buyPlot;
@@ -111,7 +108,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true; // Mengaktifkan bayangan
+renderer.shadowMap.enabled = true;
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -123,10 +120,10 @@ controls.maxPolarAngle = Math.PI / 2;
 const ambientLight = new THREE.AmbientLight(0x404040, 2);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(5, 10, 5);
 directionalLight.castShadow = true;
-scene.add(directionalLight); 
+scene.add(directionalLight);
 
 const groundGeometry = new THREE.PlaneGeometry(25, 25);
 const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
@@ -135,51 +132,56 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-function createRiceModel() {
-    const ricePlant = new THREE.Group();
-    const stalk = new THREE.Mesh(
-        new THREE.BoxGeometry(0.1, 1, 0.1),
-        new THREE.MeshLambertMaterial({ color: 0x64814d })
-    );
-    stalk.position.y = 0.5;
-    stalk.castShadow = true;
-    ricePlant.add(stalk);
-    return ricePlant;
-}
+// --- Menggunakan GLTFLoader untuk memuat model ---
+const loader = new GLTFLoader();
 
-function createCornModel() {
-    const cornPlant = new THREE.Group();
-    const stalk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.1, 0.1, 1.2, 8),
-        new THREE.MeshLambertMaterial({ color: 0x485f39 })
-    );
-    stalk.position.y = 0.6;
-    stalk.castShadow = true;
-    cornPlant.add(stalk);
-    
-    const corn = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.2, 0.2, 0.6, 8),
-        new THREE.MeshLambertMaterial({ color: 0xfdd835 })
-    );
-    corn.position.y = 0.8;
-    corn.rotation.x = Math.PI / 2;
-    corn.castShadow = true;
-    cornPlant.add(corn);
-    return cornPlant;
+function loadModels() {
+    const modelsToLoad = ['jagung.gltf', 'padi.gltf'];
+    let modelsLoaded = 0;
+
+    modelsToLoad.forEach(modelName => {
+        loader.load(
+            `assets/models/${modelName}`, // Pastikan jalur ini benar
+            (gltf) => {
+                const model = gltf.scene;
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+                loadedModels[modelName.split('.')[0]] = model;
+                modelsLoaded++;
+                if (modelsLoaded === modelsToLoad.length) {
+                    console.log("Semua model berhasil dimuat!");
+                    initializeGame();
+                }
+            },
+            (xhr) => {
+                console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+            },
+            (error) => {
+                console.error(`Error loading model ${modelName}:`, error);
+            }
+        );
+    });
 }
 
 function add3DPlot(type) {
-    let plot;
-    if (type === 'beras') {
-        plot = createRiceModel();
-    } else if (type === 'jagung') {
-        plot = createCornModel();
-    }
-    
     if (plotCounter < plotPositions.length) {
+        let model;
+        if (type === 'beras' && loadedModels.padi) {
+            model = loadedModels.padi.clone();
+        } else if (type === 'jagung' && loadedModels.jagung) {
+            model = loadedModels.jagung.clone();
+        } else {
+            console.warn(`Model untuk ${type} belum dimuat.`);
+            return;
+        }
+
         const pos = plotPositions[plotCounter];
-        plot.position.set(pos.x, pos.y + 0.5, pos.z);
-        scene.add(plot);
+        model.position.set(pos.x, pos.y, pos.z);
+        scene.add(model);
         plotCounter++;
     }
 }
@@ -191,18 +193,23 @@ function animate() {
     renderer.render(scene, camera);
 }
 
+// ====== INISIALISASI GAME =======
+function initializeGame() {
+    add3DPlot('jagung');
+    add3DPlot('beras');
+
+    camera.position.set(0, 10, 5);
+    camera.lookAt(0, 0, 0);
+
+    setInterval(harvest, 60000);
+    animate();
+    updateUI();
+}
+
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-add3DPlot('jagung');
-add3DPlot('beras');
-
-camera.position.set(0, 10, 5);
-camera.lookAt(0, 0, 0);
-
-setInterval(harvest, 60000); 
-animate();
-updateUI();
+loadModels();
