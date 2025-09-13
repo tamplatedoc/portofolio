@@ -135,13 +135,16 @@ scene.add(ground);
 // --- Menggunakan GLTFLoader untuk memuat model ---
 const loader = new GLTFLoader();
 
+// main.js
+
 function loadModels() {
     const modelsToLoad = ['jagung.gltf', 'padi.gltf', 'townhall.gltf'];
     let modelsLoaded = 0;
 
     modelsToLoad.forEach(modelName => {
         loader.load(
-            `assets/models/${modelName}`, // Pastikan jalur ini benar
+            // Ganti baris ini:
+            `https://tamplatedoc.github.io/portofolio/assets/models/${modelName}`, 
             (gltf) => {
                 const model = gltf.scene;
                 model.traverse((child) => {
