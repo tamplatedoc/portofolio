@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perburuan Monster: RPG Berbasis Teks</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #000;
+            color: #00ff00;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .game-container {
+            width: 90%;
+            max-width: 600px;
+            padding: 20px;
+            border: 2px solid #00ff00;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        .screen {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px dashed #00ff00;
+            padding: 10px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button {
+            background-color: transparent;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 10px 15px;
+            cursor: pointer;
+            font-family: 'Courier New', Courier, monospace;
+            text-transform: uppercase;
+            box-shadow: 0 0 5px #00ff00;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #00ff00;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Perburuan Monster</h1>
+        <div class="screen" id="game-screen"></div>
+        <div class="stats" id="player-stats"></div>
+        <div class="actions">
+            <button id="attack-btn">Serang</button>
+            <button id="flee-btn">Lari</button>
+            <button id="heal-btn">Makan Roti (10 💰)</button>
+        </div>
+    </div>
+
+    <script>
+        const gameScreen = document.getElementById('game-screen');
+        const playerStats = document.getElementById('player-stats');
+        const attackBtn = document.getElementById('attack-btn');
+        const fleeBtn = document.getElementById('flee-btn');
+        const healBtn = document.getElementById('heal-btn');
+
+        let player = {
+            hp: 100,
+            strength: 10,
+            gold: 0,
+            xp: 0,
+            level: 1,
+            maxHp: 100,
+        };
+
+        let currentMonster = null;
+        const monsterList = [
+            { name: "Orc Kecil 👹", hp: 30, strength: 5, gold: 10, xp: 5 },
+            { name: "Goblin Rakus 👺", hp: 45, strength: 8, gold: 15, xp: 8 },
+            { name: "Ular Raksasa 🐍", hp: 60, strength: 12, gold: 20, xp: 12 }
+        ];
+
+        function log(message) {
+            const p = document.createElement('p');
+            p.textContent = message;
+            gameScreen.appendChild(p);
+            gameScreen.scrollTop = gameScreen.scrollHeight;
+        }
+
+        function updateStats() {
+            playerStats.innerHTML = `
+                <p>❤️ HP: ${player.hp}/${player.maxHp}</p>
+                <p>💪 Kekuatan: ${player.strength}</p>
+                <p>💰 Emas: ${player.gold}</p>
+                <p>✨ XP: ${player.xp}</p>
+                <p>🌟 Level: ${player.level}</p>
+            `;
+        }
+
+        function spawnMonster() {
+            const randomIndex = Math.floor(Math.random() * monsterList.length);
+            currentMonster = { ...monsterList[randomIndex] }; // Salin data monster
+            log(`Sebuah ${currentMonster.name} muncul! Bersiaplah untuk bertarung!`);
+        }
+
+        function attack() {
+            if (!currentMonster) {
+                log("Tidak ada monster untuk diserang.");
+                return;
+            }
+
+            const playerDamage = Math.floor(Math.random() * player.strength) + 1;
+            const monsterDamage = Math.floor(Math.random() * currentMonster.strength) + 1;
+
+            currentMonster.hp -= playerDamage;
+            log(`Anda menyerang ${currentMonster.name} dan menyebabkan ${playerDamage} kerusakan.`);
+
+            if (currentMonster.hp <= 0) {
+                log(`Anda berhasil mengalahkan ${currentMonster.name}! Anda mendapatkan ${currentMonster.gold} emas dan ${currentMonster.xp} XP.`);
+                player.gold += currentMonster.gold;
+                player.xp += currentMonster.xp;
+                checkLevelUp();
+                currentMonster = null;
+                setTimeout(spawnMonster, 3000);
+            } else {
+                player.hp -= monsterDamage;
+                log(`${currentMonster.name} menyerang balik dan menyebabkan ${monsterDamage} kerusakan.`);
+            }
+
+            if (player.hp <= 0) {
+                gameOver();
+            }
+            updateStats();
+        }
+
+        function flee() {
+            if (!currentMonster) {
+                log("Anda tidak sedang dalam pertempuran.");
+                return;
+            }
+            log("Anda berhasil melarikan diri dari pertempuran.");
+            currentMonster = null;
+            setTimeout(spawnMonster, 3000);
+        }
+
+        function heal() {
+            if (player.gold >= 10) {
+                player.gold -= 10;
+                player.hp += 20;
+                if (player.hp > player.maxHp) player.hp = player.maxHp;
+                log("Anda memakan roti dan memulihkan 20 HP.");
+                updateStats();
+            } else {
+                log("Anda tidak punya cukup emas untuk membeli roti.");
+            }
+        }
+
+        function checkLevelUp() {
+            const xpNeeded = player.level * 10;
+            if (player.xp >= xpNeeded) {
+                player.level++;
+                player.strength += 5;
+                player.maxHp += 20;
+                player.hp = player.maxHp;
+                log(`Selamat! Anda naik ke Level ${player.level}! Kekuatan dan HP Anda bertambah!`);
+            }
+        }
+
+        function gameOver() {
+            log("Permainan berakhir. Anda dikalahkan oleh monster.");
+            log("Muat ulang halaman untuk bermain lagi.");
+            attackBtn.disabled = true;
+            fleeBtn.disabled = true;
+            healBtn.disabled = true;
+        }
+
+        // Event Listeners
+        attackBtn.addEventListener('click', attack);
+        fleeBtn.addEventListener('click', flee);
+        healBtn.addEventListener('click', heal);
+
+        // Mulai game
+        log("Selamat datang di Perburuan Monster!");
+        updateStats();
+        spawnMonster();
+    </script>
+</body>
+</html>
