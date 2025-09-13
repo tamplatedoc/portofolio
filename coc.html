@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Village Builder — Strategi Berjenjang (inspired)</title>
+  <style>
+    :root{--bg:#f2f7f2;--card:#fff;--accent:#2f8f3f;--muted:#6b6b6b}
+    *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+    body{margin:0;background:linear-gradient(180deg,#e9f3e9,#dff0df);min-height:100vh;padding:18px}
+    .wrap{max-width:1100px;margin:0 auto}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    h1{margin:0;font-size:20px;color:#153}
+    .top-controls{display:flex;gap:8px;align-items:center}
+    .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
+    .layout{display:grid;grid-template-columns:420px 1fr;gap:12px}
+    .hud{display:flex;gap:8px;align-items:center}
+    .res{padding:8px;border-radius:8px;background:#f5fff6;min-width:120px}
+    #map{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;padding:12px;background:linear-gradient(#f9fff9,#f2fff2);border-radius:8px}
+    .tile{height:64px;border-radius:6px;background:linear-gradient(#fff,#f6fff6);display:flex;align-items:center;justify-content:center;border:1px dashed rgba(0,0,0,.05);cursor:pointer;position:relative}
+    .tile.locked{opacity:.4}
+    .building{position:absolute;inset:4px;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:18px}
+    .toolbar{display:flex;flex-direction:column;gap:8px}
+    button{border:0;background:var(--accent);color:white;padding:8px 10px;border-radius:8px;cursor:pointer}
+    button.secondary{background:#ccc;color:#111}
+    .log{height:180px;overflow:auto;padding:8px;background:#fcfff8;border-radius:8px}
+    .controls-row{display:flex;gap:8px;margin-top:8px}
+    .small{font-size:13px;color:var(--muted)}
+    footer{margin-top:12px;text-align:center;color:var(--muted);font-size:13px}
+    @media(max-width:900px){.layout{grid-template-columns:1fr} .hud{flex-wrap:wrap}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Village Builder — Strategi Berjenjang (max level 5)</h1>
+      <div class="top-controls">
+        <div class="hud card">
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="res">💰 <strong id="gold">0</strong></div>
+            <div class="res">🔵 <strong id="elixir">0</strong></div>
+            <div class="res">🏆 <strong id="trophies">0</strong></div>
+          </div>
+        </div>
+        <div>
+          <button id="saveBtn">Simpan</button>
+          <button id="resetBtn" class="secondary">Reset</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <div class="left">
+        <div class="card">
+          <h3>Map Desa (8x6)</h3>
+          <div id="map"></div>
+          <p class="small">Klik petak untuk membangun / memilih bangunan. Beberapa petak akan terbuka saat naik level desa.</p>
+        </div>
+
+        <div class="card" style="margin-top:10px">
+          <h3>Toolbar Bangunan</h3>
+          <div class="toolbar">
+            <button data-type="townhall">🏛 Town Hall (awal level 1)</button>
+            <button data-type="goldmine">⛏ Gold Mine (produksi gold)</button>
+            <button data-type="elixir">💧 Pump Elixir (produksi elixir)</button>
+            <button data-type="cannon">🔰 Cannon (pertahanan)</button>
+            <button data-type="barracks">⚔️ Barracks (latih pasukan)</button>
+            <button data-type="wall" class="secondary">🧱 Wall (pertahanan murah)</button>
+          </div>
+          <div class="controls-row">
+            <button id="upgradeBtn">Upgrade Bangunan</button>
+            <button id="sellBtn" class="secondary">Jual Bangunan</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="card">
+          <h3>Info & Aksi</h3>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div style="min-width:160px">Desa Level: <strong id="vlevel">1</strong> / 5</div>
+            <div style="min-width:160px">XP Desa: <strong id="vxp">0</strong></div>
+            <div style="min-width:220px">Penduduk Terpakai: <strong id="popused">0</strong>/ <strong id="popcap">10</strong></div>
+          </div>
+
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+            <button id="trainBtn">Latih Pasukan (10 elixir)</button>
+            <button id="raidBtn">Serang Desa AI (Pvp sederhana)</button>
+            <button id="collectBtn" class="secondary">Ambil Hasil Produksi</button>
+          </div>
+
+          <div style="margin-top:12px">
+            <h4>Bangunan Terpilih</h4>
+            <div id="selectedInfo">Tidak ada</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>Log</h3>
+          <div class="log" id="log"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="card">Simpan file ini sebagai <code>index.html</code> dan deploy ke GitHub Pages.<br>Catatan: Game ini terinspirasi oleh permainan berjenjang berbasis pembangunan; bukan clone dan tidak memakai aset berhak cipta.</footer>
+  </div>
+
+<script>
+// Village Builder - single-file
+// Fitur utama:
+// - Grid 8x6 petak
+// - Bangun: TownHall, GoldMine, ElixirPump, Cannon, Barracks, Wall
+// - Produksi sumber daya tiap tick, kumpulkan manual
+// - Latih pasukan, serang desa AI sederhana
+// - Pengalaman desa & level hingga 5
+// - Upgrade bangunan hingga level 5
+// - Simpan di localStorage
+
+const MAX_VLEVEL = 5;
+const GRID_W = 8, GRID_H = 6;
+const TILES = GRID_W * GRID_H;
+
+// Game state
+let state = {
+  gold: 300,
+  elixir: 150,
+  trophies: 0,
+  vlevel: 1,
+  vxp: 0,
+  popUsed: 0,
+  popCap: 10,
+  map: [], // array length TILES: null or building object
+  selected: null,
+  log: [],
+  troops: 0
+};
+
+// Building definitions
+const BUILDINGS = {
+  townhall: {name:'Town Hall', emoji:'🏛', baseCost:{gold:0,elixir:0}, baseHP:500},
+  goldmine: {name:'Gold Mine', emoji:'⛏', baseCost:{gold:100,elixir:30}, prod:{gold:5}},
+  elixir: {name:'Elixir Pump', emoji:'💧', baseCost:{gold:80,elixir:50}, prod:{elixir:4}},
+  cannon: {name:'Cannon', emoji:'🔰', baseCost:{gold:120,elixir:0}, baseHP:180, def:true},
+  barracks: {name:'Barracks', emoji:'⚔️', baseCost:{gold:150,elixir:60}},
+  wall: {name:'Wall', emoji:'🧱', baseCost:{gold:20,elixir:0}, baseHP:60}
+};
+
+// Config for scaling
+function upgradeCost(type, level){
+  const b = BUILDINGS[type];
+  const mult = 1 + (level-1)*0.8;
+  return {gold: Math.round((b.baseCost.gold||50)*mult), elixir: Math.round((b.baseCost.elixir||0)*mult)};
+}
+function prodRate(type, level){
+  const b = BUILDINGS[type];
+  if(!b.prod) return 0;
+  let total = 0; Object.keys(b.prod).forEach(k=> total += b.prod[k]);
+  return Math.round(total * Math.pow(1.35, level-1));
+}
+function hpFor(type, level){ return Math.round((BUILDINGS[type].baseHP||100) * Math.pow(1.5, level-1)); }
+
+// init map
+for(let i=0;i<TILES;i++) state.map.push(null);
+// place TownHall center
+const centerIndex = Math.floor(TILES/2);
+state.map[centerIndex] = makeBuilding('townhall',1);
+
+// DOM refs
+const mapEl = document.getElementById('map');
+const goldEl = document.getElementById('gold');
+const elixirEl = document.getElementById('elixir');
+const trophiesEl = document.getElementById('trophies');
+const vlevelEl = document.getElementById('vlevel');
+const vxpEl = document.getElementById('vxp');
+const popUsedEl = document.getElementById('popused');
+const popCapEl = document.getElementById('popcap');
+const selectedInfoEl = document.getElementById('selectedInfo');
+const logEl = document.getElementById('log');
+
+// render map
+function renderMap(){
+  mapEl.innerHTML = '';
+  for(let i=0;i<TILES;i++){
+    const div = document.createElement('div'); div.className='tile'; div.dataset.index=i;
+    const b = state.map[i];
+    if(b){
+      const el = document.createElement('div'); el.className='building'; el.innerHTML = `<div style="font-size:18px">${BUILDINGS[b.type].emoji}</div><div style="font-size:11px">Lv ${b.level}</div>`;
+      div.appendChild(el);
+    }
+    div.addEventListener('click', ()=>onTileClick(i));
+    mapEl.appendChild(div);
+  }
+}
+
+function renderHUD(){
+  goldEl.textContent = state.gold;
+  elixirEl.textContent = state.elixir;
+  trophiesEl.textContent = state.trophies;
+  vlevelEl.textContent = state.vlevel;
+  vxpEl.textContent = state.vxp;
+  popUsedEl.textContent = state.popUsed;
+  popCapEl.textContent = state.popCap;
+}
+
+function log(msg){ state.log.unshift('['+new Date().toLocaleTimeString()+'] '+msg); renderLog(); }
+function renderLog(){ logEl.innerHTML = state.log.slice(0,200).map(l=>'<div>'+l+'</div>').join(''); }
+
+function makeBuilding(type, level=1){
+  return {type, level, hp: hpFor(type, level), storedGold:0, storedElixir:0};
+}
+
+// Tile click
+function onTileClick(i){
+  const b = state.map[i];
+  if(b){ state.selected = {index:i, building:b}; showSelectedInfo(); }
+  else {
+    // build prompt
+    const choice = prompt('Bangun jenis? (ketik: goldmine, elixir, cannon, barracks, wall)\nKetik cancel untuk batal');
+    if(!choice) return;
+    const type = choice.trim().toLowerCase();
+    if(!BUILDINGS[type]) return alert('Tipe tidak dikenal');
+    const cost = upgradeCost(type,1);
+    if(state.gold < cost.gold || state.elixir < cost.elixir) return alert('Sumber daya tidak cukup');
+    state.gold -= cost.gold; state.elixir -= cost.elixir;
+    state.map[i] = makeBuilding(type,1);
+    if(type==='barracks') state.popCap += 5;
+    log('Membangun '+BUILDINGS[type].name+' di petak '+(i+1));
+    save(); renderMap(); renderHUD();
+  }
+}
+
+function showSelectedInfo(){
+  if(!state.selected){ selectedInfoEl.textContent = 'Tidak ada'; return; }
+  const b = state.selected.building; const i = state.selected.index;
+  const html = `<div>${BUILDINGS[b.type].emoji} <strong>${BUILDINGS[b.type].name} (Lv ${b.level})</strong></div>
+    <div>HP: ${b.hp}</div>
+    <div>Stored Gold: ${b.storedGold} | Stored Elixir: ${b.storedElixir}</div>
+    <div style="margin-top:8px"><button id="upgradeSel">Upgrade (biaya lihat dialog)</button> <button id="sellSel" class="secondary">Jual (kembalikan 50%)</button></div>`;
+  selectedInfoEl.innerHTML = html;
+  document.getElementById('upgradeSel').addEventListener('click', ()=>upgradeSelected());
+  document.getElementById('sellSel').addEventListener('click', ()=>sellSelected());
+}
+
+function upgradeSelected(){
+  if(!state.selected) return alert('Tidak ada bangunan terpilih');
+  const b = state.selected.building;
+  if(b.level >= 5) return alert('Sudah level maksimal');
+  const cost = upgradeCost(b.type, b.level+1);
+  if(state.gold < cost.gold || state.elixir < cost.elixir) return alert('Sumber daya tidak cukup');
+  state.gold -= cost.gold; state.elixir -= cost.elixir;
+  b.level +=1; b.hp = hpFor(b.type, b.level);
+  log('Meng-upgrade '+BUILDINGS[b.type].name+' menjadi level '+b.level);
+  state.vxp += 10; checkVillageLevelUp(); save(); renderMap(); renderHUD(); showSelectedInfo();
+}
+
+function sellSelected(){
+  if(!state.selected) return;
+  const idx = state.selected.index; const b = state.selected.building; const base = BUILDINGS[b.type].baseCost;
+  const refund = Math.round(((base.gold||0) + (base.elixir||0))*0.5 * b.level);
+  state.gold += refund; state.map[idx] = null; log('Menjual '+BUILDINGS[b.type].name+' (dapat '+refund+' gold)');
+  if(b.type==='barracks') state.popCap -=5;
+  state.selected = null; save(); renderMap(); renderHUD(); showSelectedInfo();
+}
+
+// Collect production
+function collectProduction(){
+  let totalG=0, totalE=0;
+  state.map.forEach(b=>{ if(!b) return; if(b.type==='goldmine'){ const amt = Math.round(5 * Math.pow(1.3,b.level-1)); totalG += amt; }
+    if(b.type==='elixir'){ const amt = Math.round(4 * Math.pow(1.3,b.level-1)); totalE += amt; }
+  });
+  state.gold += totalG; state.elixir += totalE;
+  log('Mengumpulkan produksi: +'+totalG+' gold, +'+totalE+' elixir'); save(); renderHUD();
+}
+
+// Train troops
+function trainTroop(){
+  const cost = 10;
+  if(state.elixir < cost) return alert('Elixir tidak cukup untuk melatih troop');
+  if(state.popUsed +1 > state.popCap) return alert('Populasi penuh');
+  state.elixir -= cost; state.troops +=1; state.popUsed +=1; log('Melatih 1 troop'); save(); renderHUD();
+}
+
+// Raid AI village (simple simulation)
+function raidAI(){
+  if(state.troops <= 0) return alert('Belum ada pasukan. Latih dulu.');
+  // create an AI base with random defenses
+  const aiDef = Math.round(50 + Math.random()*200 + state.vlevel*30);
+  const attackPower = state.troops * (10 + Math.random()*10);
+  log('Memulai serangan: power pasukan '+Math.round(attackPower)+' vs pertahanan AI '+aiDef);
+  if(attackPower > aiDef){
+    // win
+    const gainGold = Math.round(80 + Math.random()*200 + state.vlevel*50);
+    const gainElixir = Math.round(50 + Math.random()*150 + state.vlevel*30);
+    state.gold += gainGold; state.elixir += gainElixir; state.trophies += 25; state.vxp += 20;
+    log('Menang! Mendapat +'+gainGold+' gold, +'+gainElixir+' elixir, +25 trophies');
+  } else {
+    // lose
+    const lostTroops = Math.max(1, Math.round(state.troops * Math.random()));
+    state.troops = Math.max(0, state.troops - lostTroops);
+    state.popUsed = Math.max(0, state.popUsed - lostTroops);
+    state.trophies = Math.max(0, state.trophies - 10);
+    log('Kalah. Pasukan kehilangan '+lostTroops+' unit, -10 trophies');
+  }
+  // reset troops after raid
+  state.troops = 0; state.popUsed = Math.max(0, state.popUsed);
+  save(); renderHUD();
+}
+
+// Village leveling
+function checkVillageLevelUp(){
+  const need = 40 * state.vlevel; if(state.vlevel >= MAX_VLEVEL) return;
+  if(state.vxp >= need){ if(confirm('Desa mendapatkan cukup XP untuk naik level! Naik sekarang?')){ state.vxp -= need; state.vlevel +=1; state.popCap += 10; log('Desa naik level ke '+state.vlevel+' — petak baru terbuka'); save(); renderHUD(); renderMap(); } }
+}
+
+// Autosave & persistence
+function save(userTriggered=false){ localStorage.setItem('village.save', JSON.stringify(state)); if(userTriggered) alert('Tersimpan ke localStorage'); }
+function load(){ const raw = localStorage.getItem('village.save'); if(!raw) return; try{ const s = JSON.parse(raw); Object.assign(state, s); } catch(e){ console.error('gagal load'); } }
+
+// small UI bindings
+document.querySelectorAll('[data-type]').forEach(btn=> btn.addEventListener('click', (e)=>{
+  const type = e.currentTarget.dataset.type; const idx = prompt('Pilih nomor petak (1-'+TILES+') untuk membangun '+BUILDINGS[type].name);
+  if(!idx) return; const i = parseInt(idx)-1; if(isNaN(i) || i<0 || i>=TILES) return alert('Index invalid');
+  if(state.map[i]) return alert('Petak sudah terisi');
+  const cost = upgradeCost(type,1);
+  if(state.gold < cost.gold || state.elixir < cost.elixir) return alert('Sumber daya tidak cukup');
+  state.gold -= cost.gold; state.elixir -= cost.elixir; state.map[i] = makeBuilding(type,1);
+  if(type==='barracks') state.popCap +=5;
+  log('Membangun '+BUILDINGS[type].name+' di petak '+(i+1)); save(); renderMap(); renderHUD();
+}));
+
+document.getElementById('upgradeBtn').addEventListener('click', ()=>{
+  if(!state.selected) return alert('Pilih bangunan dulu'); upgradeSelected(); });
+
+document.getElementById('sellBtn').addEventListener('click', ()=>{ if(!state.selected) return alert('Pilih bangunan dulu'); sellSelected(); });
+
+document.getElementById('trainBtn').addEventListener('click', ()=>{ trainTroop(); renderHUD(); });
+document.getElementById('raidBtn').addEventListener('click', ()=>{ raidAI(); renderHUD(); });
+document.getElementById('collectBtn').addEventListener('click', ()=>{ collectProduction(); });
+
+document.getElementById('saveBtn').addEventListener('click', ()=> save(true));
+document.getElementById('resetBtn').addEventListener('click', ()=>{ if(confirm('Reset permainan?')){ localStorage.removeItem('village.save'); location.reload(); } });
+
+// tick: passive production accumulate in building stored values
+setInterval(()=>{
+  state.map.forEach(b=>{ if(!b) return; if(b.type==='goldmine'){ const amt = Math.round(5 * Math.pow(1.25,b.level-1)); b.storedGold = (b.storedGold||0) + amt; }
+    if(b.type==='elixir'){ const amt = Math.round(4 * Math.pow(1.25,b.level-1)); b.storedElixir = (b.storedElixir||0) + amt; }
+  });
+  // small passive XP
+  state.vxp += 1;
+  save(); renderMap(); renderHUD(); }, 5000);
+
+// initial load
+load(); renderMap(); renderHUD(); renderLog(); showSelectedInfo();
+
+// helper renderLog
+function renderLog(){ logEl.innerHTML = state.log.slice(0,200).map(l=>'<div>'+l+'</div>').join(''); }
+
+// End
+</script>
+</body>
+</html>
