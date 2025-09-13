@@ -3,98 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Petualangan Farming</title>
-    
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
-        body {
-            background-color: #2e3b2e;
-            color: #a4a956;
-            font-family: 'Press Start 2P', cursive;
-            text-align: center;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .game-container {
-            border: 5px solid #a4a956;
-            padding: 20px;
-            background-color: #5d6700;
-            box-shadow: 10px 10px 0px 0px #1e251e;
-            max-width: 800px;
-            width: 90%;
-            margin-bottom: 20px;
-        }
-
-        .hud {
-            display: flex;
-            justify-content: space-around;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #a4a956;
-            padding-bottom: 10px;
-        }
-
-        .resource {
-            font-size: 1.2rem;
-        }
-        
-        .farm {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .plot {
-            width: 80px;
-            height: 80px;
-            background-color: #213123;
-            border: 2px solid #a4a956;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            text-shadow: 1px 1px #1e251e;
-        }
-
-        .plot.corn { background-color: #925f20; }
-        .plot.rice { background-color: #64814d; }
-        .plot.wheat { background-color: #a37b3b; }
-
-        button {
-            background-color: #5d6700;
-            color: #a4a956;
-            border: 2px solid #a4a956;
-            padding: 10px 15px;
-            font-family: 'Press Start 2P', cursive;
-            cursor: pointer;
-            margin: 5px;
-            box-shadow: 3px 3px 0px 0px #313300;
-        }
-
-        button:hover {
-            background-color: #7c8800;
-        }
-
-        .message {
-            margin-top: 20px;
-            min-height: 25px;
-        }
-        
-        .hidden {
-            display: none;
-        }
-    </style>
+    <title>Petualangan Farming 3D</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div class="game-container">
-        <h1>Petualangan Farming</h1>
-        
         <div class="hud">
             <div class="resource">Beras: <span id="beras-count">0</span></div>
             <div class="resource">Jagung: <span id="jagung-count">0</span></div>
@@ -102,132 +16,21 @@
             <div class="resource">Level: <span id="level">1</span></div>
         </div>
 
-        <div class="farm" id="farm-plots">
-            </div>
+        <canvas id="game-canvas"></canvas>
 
         <div class="actions">
-            <button onclick="buyPlot('jagung')">Beli Petak Jagung (2 Beras)</button>
-            <button onclick="buyPlot('beras')">Beli Petak Beras (2 Jagung)</button>
-            <button onclick="buyPlot('gandum')" id="gandum-button" class="hidden">Beli Petak Gandum (3 Beras, 3 Jagung)</button>
-            <button onclick="upgradeTownHall()">Town Hall (10 Beras, 10 Jagung)</button>
+            <button onclick="buyPlot('jagung')">Beli Petak Jagung</button>
+            <button onclick="buyPlot('beras')">Beli Petak Beras</button>
+            <button onclick="buyPlot('gandum')" id="gandum-button" class="hidden">Beli Petak Gandum</button>
+            <button onclick="upgradeTownHall()">Town Hall</button>
         </div>
         
         <div class="message" id="game-message"></div>
     </div>
 
-    <script>
-        let resources = {
-            beras: 0,
-            jagung: 0,
-            gandum: 0
-        };
-        
-        let plots = {
-            beras: 1,
-            jagung: 1,
-            gandum: 0
-        };
-        
-        let level = 1;
-        
-        const costs = {
-            'jagung': { beras: 2 },
-            'beras': { jagung: 2 },
-            'gandum': { beras: 3, jagung: 3 }
-        };
-        
-        const upgradeCost = {
-            level1: { beras: 10, jagung: 10 }
-        };
-
-        const elements = {
-            berasCount: document.getElementById('beras-count'),
-            jagungCount: document.getElementById('jagung-count'),
-            gandumCount: document.getElementById('gandum-count'),
-            gandumDisplay: document.getElementById('gandum-display'),
-            gandumButton: document.getElementById('gandum-button'),
-            levelDisplay: document.getElementById('level'),
-            farmPlots: document.getElementById('farm-plots'),
-            gameMessage: document.getElementById('game-message')
-        };
-
-        function updateUI() {
-            elements.berasCount.textContent = resources.beras;
-            elements.jagungCount.textContent = resources.jagung;
-            elements.gandumCount.textContent = resources.gandum;
-            elements.levelDisplay.textContent = level;
-
-            elements.farmPlots.innerHTML = '';
-            for (let i = 0; i < plots.jagung; i++) {
-                elements.farmPlots.innerHTML += `<div class="plot corn">JAGUNG</div>`;
-            }
-            for (let i = 0; i < plots.beras; i++) {
-                elements.farmPlots.innerHTML += `<div class="plot rice">BERAS</div>`;
-            }
-            for (let i = 0; i < plots.gandum; i++) {
-                elements.farmPlots.innerHTML += `<div class="plot wheat">GANDUM</div>`;
-            }
-        }
-
-        function showMessage(msg) {
-            elements.gameMessage.textContent = msg;
-            setTimeout(() => {
-                elements.gameMessage.textContent = '';
-            }, 3000);
-        }
-
-        function harvest() {
-            resources.beras += plots.beras;
-            resources.jagung += plots.jagung;
-            resources.gandum += plots.gandum;
-            showMessage(`Panen! Anda mendapatkan ${plots.beras} beras dan ${plots.jagung} jagung.`);
-            updateUI();
-        }
-
-        function buyPlot(type) {
-            const cost = costs[type];
-            let canBuy = true;
-            for (const res in cost) {
-                if (resources[res] < cost[res]) {
-                    canBuy = false;
-                    showMessage(`${res} tidak cukup!`);
-                    break;
-                }
-            }
-
-            if (canBuy) {
-                for (const res in cost) {
-                    resources[res] -= cost[res];
-                }
-                plots[type]++;
-                showMessage(`Berhasil membeli petak ${type}!`);
-                updateUI();
-            }
-        }
-
-        function upgradeTownHall() {
-            if (level === 1) {
-                if (resources.beras >= upgradeCost.level1.beras && resources.jagung >= upgradeCost.level1.jagung) {
-                    resources.beras -= upgradeCost.level1.beras;
-                    resources.jagung -= upgradeCost.level1.jagung;
-                    level = 2;
-                    showMessage("Town Hall di-upgrade ke Level 2! Gandum sekarang tersedia!");
-                    elements.gandumDisplay.classList.remove('hidden');
-                    elements.gandumButton.classList.remove('hidden');
-                    updateUI();
-                } else {
-                    showMessage("Sumber daya tidak cukup untuk Town Hall Level 2!");
-                }
-            } else {
-                showMessage("Town Hall sudah mencapai level maksimum.");
-            }
-        }
-        
-        // Timer panen setiap 1 menit (60000ms)
-        setInterval(harvest, 60000);
-
-        // Inisialisasi tampilan awal
-        updateUI();
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js"></script>
+    
+    <script src="main.js"></script>
 </body>
 </html>
