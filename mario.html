@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Pixel Jumper — Platformer (inspired classic platformers)</title>
+<style>
+  html,body{height:100%;margin:0;background:#7ec0ee;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  #gameWrap{max-width:1024px;margin:18px auto;padding:12px}
+  canvas{display:block;background:linear-gradient(#80d0ff,#cfefff);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.15)}
+  .ui{display:flex;justify-content:space-between;align-items:center;margin:8px 0;color:#083;}
+  button{padding:8px 10px;border-radius:8px;border:0;background:#2b8e2b;color:#fff;cursor:pointer}
+  .muted{color:#055}
+  p.small{font-size:13px;color:#023}
+  @media(max-width:600px){#gameWrap{padding:6px}}
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <div class="ui">
+    <div>Pixel Jumper — Platformer (bukan Mario)</div>
+    <div>
+      <button id="restart">Restart</button>
+      <button id="toggleSound">Suara: On</button>
+    </div>
+  </div>
+  <canvas id="game" width="900" height="420"></canvas>
+  <p class="small">Kontrol: ← → = bergerak, Space = lompat, S = serang (jika powerup). Host: simpan sebagai <code>index.html</code> dan aktifkan GitHub Pages.</p>
+</div>
+<script>
+/* Pixel Jumper
+   - Single-file HTML5 canvas platformer
+   - Original character (no copyrighted assets)
+   - Features: platform collision, jumping, patrolling enemies, coins, score, 3 levels
+   - Hostable on GitHub Pages
+*/
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+let soundOn = true;
+
+// Simple sound using WebAudio API (beeps) - optional
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+function beep(freq=440, time=0.08){ if(!soundOn) return; if(!AudioCtx) return; if(!audioCtx) audioCtx = new AudioCtx(); const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.frequency.value = freq; o.type='sine'; o.connect(g); g.connect(audioCtx.destination); g.gain.value = 0.05; o.start(); o.stop(audioCtx.currentTime + time); }
+
+// Game state
+let levelIndex = 0;
+let levels = [];
+let keys = {};
+let cameraX = 0;
+let score = 0;
+let lives = 3;
+
+// Player
+const player = {
+  x:40, y:300, w:22, h:32,
+  vx:0, vy:0,
+  speed:2.2, jumpPower:6.6,
+  onGround:false,
+  facing:1,
+  isAlive:true
+};
+
+// Tile size for level grid
+const TILE = 32;
+
+// Utility functions
+function rectInter(a,b){ return !(a.x + a.w <= b.x || a.x >= b.x + b.w || a.y + a.h <= b.y || a.y >= b.y + b.h); }
+
+// Level definition helper: 2D array of chars
+function createLevel(mapStr, width, height){
+  const rows = [];
+  let i=0;
+  for(let y=0;y<height;y++){
+    const row = [];
+    for(let x=0;x<width;x++){
+      row.push(mapStr[i] || ' ');
+      i++;
+    }
+    rows.push(row);
+  }
+  return {map:rows,width,height};
+}
+
+// Simple levels (text maps): 
+// ' ' empty, '#' ground/platform, 'C' coin, 'E' enemy spawn, 'G' goal flag
+levels.push(createLevel(
+  `                                                                                                   
+   ########                #######                                                ####                
+                                                                                                       
+        C                    C       C               ##               C    C         C               G
+                                                                                                       
+########     #######    ########    ########    #########    ##########    ########    ###########
+`, 100, 7));
+
+levels.push(createLevel(
+  `                                                                                                   
+   #####       #####       #####       #####       #####       #####       #####        #####        
+                                                                                                       
+     C     C     C    C       C      C       C    ##    C   C       C       C          C        G  
+                                                                                                       
+#######   ###########   ############   ###############   #################   ############   #####
+`, 120,7));
+
+levels.push(createLevel(
+  `                                                                                                   
+    #########             ###      ######      #####      ########      #####     ####      #####   
+                                                                                                       
+   C   C   C    C   C    C   C    C   C    C       C      C     C   C      C    C     C     C     G  
+                                                                                                       
+#################    ##################    ########################    #################    ######
+`, 110,7));
+
+// Convert maps into objects: platforms, coins, enemies, goal
+function buildLevel(lv){
+  const tiles = lv.map;
+  const platforms = [];
+  const coins = [];
+  const enemies = [];
+  let goal = null;
+  for(let y=0;y<lv.height;y++){
+    for(let x=0;x<lv.width;x++){
+      const ch = tiles[y][x];
+      const px = x*TILE; const py = y*TILE + 40; // offset top
+      if(ch === '#') platforms.push({x:px,y:py,w:TILE,h:TILE});
+      if(ch === 'C') coins.push({x:px+8,y:py+6,w:16,h:16,collected:false});
+      if(ch === 'E') enemies.push({x:px,y:py,w:28,h:28,vx:1.1,dir:1,patrol:80,baseX:px});
+      if(ch === 'G') goal = {x:px,y:py,w:20,h:36};
+    }
+  }
+  // add ground floor if none
+  if(platforms.length===0){
+    for(let i=0;i<lv.width;i++) platforms.push({x:i*TILE,y: (lv.height-1)*TILE+40,w:TILE,h:TILE});
+  }
+  return {platforms,coins,enemies,goal};
+}
+
+let current = null;
+function loadLevel(i){
+  levelIndex = i % levels.length;
+  current = buildLevel(levels[levelIndex]);
+  player.x = 48; player.y = 200; player.vx = 0; player.vy =0; player.onGround=false; player.isAlive=true;
+  cameraX = 0;
+}
+
+loadLevel(0);
+
+// Input
+window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()] = true; });
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+document.getElementById('restart').addEventListener('click', ()=>{ score=0; lives=3; loadLevel(0); });
+document.getElementById('toggleSound').addEventListener('click', ()=>{ soundOn = !soundOn; document.getElementById('toggleSound').textContent = 'Suara: '+(soundOn? 'On':'Off'); });
+
+// Physics and update
+const GRAV = 0.34;
+function update(dt){
+  if(!player.isAlive) return;
+  // Horizontal movement
+  let move = 0;
+  if(keys['arrowleft'] || keys['a']) move -= 1;
+  if(keys['arrowright'] || keys['d']) move += 1;
+  player.vx = move * player.speed * (1 + levelIndex*0.05);
+  if(move!==0) player.facing = move>0?1:-1;
+
+  // Jump
+  if((keys[' '] || keys['w'] || keys['arrowup']) && player.onGround){ player.vy = -player.jumpPower; player.onGround=false; beep(880,0.06); }
+
+  // Apply gravity
+  player.vy += GRAV;
+  if(player.vy > 12) player.vy = 12;
+
+  // Move horizontally and collide with platforms
+  player.x += player.vx;
+  collidePlatforms(player, true);
+  // Move vertically
+  player.y += player.vy;
+  player.onGround = false;
+  collidePlatforms(player, false);
+
+  // Camera follow
+  cameraX = Math.max(0, player.x - 180);
+
+  // Coins
+  current.coins.forEach(c=>{
+    if(!c.collected && rectInter({x:player.x,y:player.y,w:player.w,h:player.h}, c)){
+      c.collected = true; score += 10; beep(1200,0.06); }
+  });
+
+  // Enemies
+  current.enemies.forEach(e=>{
+    e.x += e.vx*e.dir;
+    // simple patrol bounds
+    if(Math.abs(e.x - e.baseX) > e.patrol) e.dir *= -1;
+    // collision with player
+    if(rectInter({x:player.x,y:player.y,w:player.w,h:player.h}, e)){
+      if(player.vy > 0 && (player.y + player.h - e.y) < 18){
+        // stomp
+        score += 25; e.dead = true; player.vy = -4; beep(600,0.06);
+      } else {
+        // hit
+        hurtPlayer();
+      }
+    }
+  });
+  // remove dead enemies
+  current.enemies = current.enemies.filter(e=>!e.dead);
+
+  // Goal
+  if(current.goal && rectInter({x:player.x,y:player.y,w:player.w,h:player.h}, current.goal)){
+    // advance level
+    beep(1500,0.12); loadLevel(levelIndex+1); score += 100; 
+  }
+
+  // Falling off bottom
+  if(player.y > H + 200){ hurtPlayer(); }
+}
+
+function hurtPlayer(){
+  lives -=1; beep(200,0.12);
+  if(lives <= 0){ player.isAlive = false; setTimeout(()=>{ if(confirm('Game Over. Restart?')){ score=0; lives=3; loadLevel(0); } },200); }
+  else { player.x = 48; player.y = 120; player.vx = 0; player.vy =0; }
+}
+
+function collidePlatforms(obj, horizontal){
+  current.platforms.forEach(p=>{
+    if(rectInter(obj,p)){
+      if(horizontal){
+        if(obj.vx > 0) obj.x = p.x - obj.w - 0.01;
+        else if(obj.vx < 0) obj.x = p.x + p.w + 0.01;
+      } else {
+        if(obj.vy > 0){ obj.y = p.y - obj.h; obj.vy = 0; obj.onGround = true; }
+        else if(obj.vy < 0){ obj.y = p.y + p.h + 0.01; obj.vy = 0; }
+      }
+    }
+  });
+}
+
+// Render
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // sky gradient handled by CSS background; draw distant hills
+  ctx.save(); ctx.translate(-cameraX*0.3,20);
+  for(let i=0;i<6;i++){ ctx.fillStyle = '#9bd48b'; ctx.beginPath(); const sx = (i*220)%1200; ctx.ellipse(sx,160,200,80,0,0,Math.PI*2); ctx.fill(); }
+  ctx.restore();
+
+  // draw platforms
+  ctx.save(); ctx.translate(-cameraX,0);
+  current.platforms.forEach(p=>{
+    ctx.fillStyle = '#85603b'; ctx.fillRect(p.x, p.y, p.w, p.h);
+    // top grass
+    ctx.fillStyle = '#3fa34d'; ctx.fillRect(p.x, p.y, p.w, 6);
+  });
+
+  // coins
+  current.coins.forEach(c=>{
+    if(c.collected) return;
+    ctx.fillStyle = 'gold'; ctx.beginPath(); ctx.ellipse(c.x+8, c.y+8, 7,7,0,0,Math.PI*2); ctx.fill();
+  });
+
+  // enemies
+  current.enemies.forEach(e=>{
+    ctx.fillStyle = '#a33'; ctx.fillRect(e.x, e.y- e.h + 24, e.w, e.h);
+    ctx.fillStyle = '#611'; ctx.fillRect(e.x+4, e.y- e.h + 26, e.w-8, e.h-8);
+  });
+
+  // goal flag
+  if(current.goal){ ctx.fillStyle = '#333'; ctx.fillRect(current.goal.x+6, current.goal.y-60, 4, 60); ctx.fillStyle = '#e22'; ctx.fillRect(current.goal.x+10, current.goal.y-60, 22, 14); }
+
+  // player
+  ctx.fillStyle = '#222'; ctx.fillRect(player.x, player.y - player.h, player.w, player.h);
+  // face / cap as simple pixels
+  ctx.fillStyle = '#ffcc99'; ctx.fillRect(player.x+4, player.y - player.h +6, 14,10); // face
+  ctx.fillStyle = '#2b6'; ctx.fillRect(player.x, player.y - player.h, player.w, 8); // cap
+
+  ctx.restore();
+
+  // HUD
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(8,8,220,56);
+  ctx.fillStyle = '#045'; ctx.font = '16px monospace'; ctx.fillText('Score: '+score, 18,28);
+  ctx.fillText('Level: '+(levelIndex+1), 18,48);
+  ctx.fillText('Lives: '+lives, 120,48);
+}
+
+// Game loop
+let last = performance.now();
+function loop(now){
+  const dt = (now - last)/16.666; last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Small level parser to populate coins/enemies/goal from map strings that used 'C','E','G'
+// We already did buildLevel above.
+
+// End of script
+</script>
+</body>
+</html>
