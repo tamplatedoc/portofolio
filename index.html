@@ -1,254 +1,367 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Futuristic Farming</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Farm City — Petani & Kota (Max Level 5)</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
-    body {
-      background-color: #0d1a26;
-      color: #00f0ff;
-      font-family: 'Roboto Mono', monospace;
-      margin: 0;
-      overflow: hidden;
-    }
-    .hud {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 20px;
-      padding: 10px;
-      background: rgba(0,0,0,0.5);
-      border: 1px solid #00f0ff;
-      box-shadow: 0 0 10px #00f0ff;
-      z-index: 10;
-    }
-    .resource { text-shadow: 0 0 5px #00f0ff; }
-    .actions {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 10px;
-      z-index: 10;
-    }
-    button {
-      background: rgba(0,240,255,0.1);
-      border: 1px solid #00f0ff;
-      color: #00f0ff;
-      padding: 10px 15px;
-      cursor: pointer;
-      text-transform: uppercase;
-      font-family: 'Roboto Mono', monospace;
-      box-shadow: 0 0 10px #00f0ff;
-    }
-    button:hover {
-      background: rgba(0,240,255,0.3);
-      box-shadow: 0 0 20px #00f0ff;
-    }
-    .message {
-      position: absolute;
-      bottom: 80px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #00ff00;
-      text-shadow: 0 0 5px #00ff00;
-      z-index: 10;
-    }
-    .hidden { display: none; }
-    canvas { display:block; }
+    /* Simple, responsive, mobile-friendly style */
+    :root{--bg:#eef6ea;--card:#fff;--accent:#7bb26a;--muted:#6b6b6b}
+    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{margin:0;background:linear-gradient(180deg,var(--bg),#dff0d9);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .wrap{width:100%;max-width:1100px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    h1{margin:0;font-size:20px;color:#224422}
+    .controls{display:flex;gap:8px;align-items:center}
+    .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
+    .game{display:grid;grid-template-columns:320px 1fr;gap:12px}
+    .left{display:flex;flex-direction:column;gap:12px}
+    .stats{display:flex;gap:8px;flex-wrap:wrap}
+    .stat{padding:8px;border-radius:8px;background:#f8fff8;min-width:120px}
+    .field{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .plot{height:90px;border-radius:8px;background:linear-gradient(180deg,#fff,#f1fff0);display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;border:2px dashed transparent}
+    .plot.locked{opacity:.5;cursor:not-allowed}
+    .plot.planted{border-style:solid}
+    .actions{display:flex;flex-direction:column;gap:8px}
+    button{border:0;background:var(--accent);color:white;padding:8px 10px;border-radius:8px;cursor:pointer}
+    button.secondary{background:#ccc;color:#111}
+    .log{height:160px;overflow:auto;padding:8px;background:#fcfff8;border-radius:8px}
+    .city{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px}
+    .building{width:120px;height:90px;border-radius:8px;background:linear-gradient(180deg,#fff,#f7fff7);display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #e6f3e6}
+    .levelbar{height:12px;background:#e6ffe6;border-radius:8px;overflow:hidden;margin-top:8px}
+    .xp{height:100%;background:linear-gradient(90deg,#84d07a,#4a9b47)}
+    footer{margin-top:12px;text-align:center;color:var(--muted);font-size:13px}
+    @media(max-width:780px){.game{grid-template-columns:1fr} .left{order:2}} 
   </style>
 </head>
 <body>
+  <div class="wrap">
+    <header>
+      <h1>Farm City — Petani & Kota (Max Level 5)</h1>
+      <div class="controls">
+        <button id="saveBtn" title="Simpan permainan">Simpan</button>
+        <button id="resetBtn" class="secondary" title="Reset permainan">Reset</button>
+      </div>
+    </header>
 
-  <div class="hud">
-    <div class="resource">Beras: <span id="beras-count">0</span></div>
-    <div class="resource">Jagung: <span id="jagung-count">0</span></div>
-    <div class="resource hidden" id="gandum-display">Gandum: <span id="gandum-count">0</span></div>
-    <div class="resource">Level: <span id="level">1</span></div>
+    <div class="game">
+      <div class="left">
+        <div class="card stats">
+          <div class="stat">Uang: <strong id="money">0</strong></div>
+          <div class="stat">XP: <strong id="xp">0</strong></div>
+          <div class="stat">Level: <strong id="level">1</strong> / 5</div>
+          <div class="stat">Kota: <strong id="cityProgress">0%</strong></div>
+        </div>
+
+        <div class="card">
+          <h3>Petak Tanam</h3>
+          <div class="field" id="field"></div>
+          <p style="font-size:13px;color:var(--muted);margin-top:8px">Klik petak untuk memilih aksi. Level membuka petak baru.</p>
+        </div>
+
+        <div class="card actions">
+          <h3>Aksi</h3>
+          <div style="display:flex;gap:6px">
+            <button id="plantCorn">Tanam Jagung 🌽 (Biaya 10)</button>
+            <button id="plantRice">Tanam Padi 🌾 (Biaya 8)</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button id="waterBtn">Sirami (+1 hari simulasi)</button>
+            <button id="harvestBtn">Panen Sekarang</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button id="buildBtn">Bangun Fasilitas Kota (butuh 50 uang)</button>
+            <button id="upgradeBtn" class="secondary">Upgrade Level (butuh XP sesuai level)</button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="right">
+        <div class="card">
+          <h3>Kota & Bangunan</h3>
+          <div class="city" id="city"></div>
+          <div class="levelbar" style="margin-top:8px"><div class="xp" id="xpBar" style="width:10%"></div></div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>Log</h3>
+          <div class="log" id="log"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="card">Cara hosting: simpan file ini sebagai <code>index.html</code> dan upload ke repo GitHub. Aktifkan GitHub Pages di branch main / gh-pages.</footer>
   </div>
 
-  <div class="actions">
-    <button onclick="buyPlot('jagung')">Beli Jagung (2B)</button>
-    <button onclick="buyPlot('beras')">Beli Beras (2J)</button>
-    <button onclick="buyPlot('gandum')" id="gandum-button" class="hidden">Beli Gandum (3B,3J)</button>
-    <button onclick="upgradeTownHall()">Town Hall (10B,10J)</button>
-  </div>
+<script>
+/*
+  Farm City - Single-file web game
+  Fitur utama:
+  - Tanam Jagung atau Padi di petak (maks 9 petak total, dibuka per level)
+  - Siram / lewati hari -> tanaman bertumbuh otomatis
+  - Panen -> dapat uang dan XP
+  - Bangun fasilitas kota dengan uang, meningkatkan progress kota
+  - Naik level sampai maksimal 5 (setiap level butuh XP lebih banyak)
+  - Data disimpan ke localStorage
 
-  <div class="message" id="game-message"></div>
-  <canvas id="game-canvas"></canvas>
+  Hosting: simpan sebagai index.html lalu deploy ke GitHub Pages
+*/
 
-  <script type="module">
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js';
-    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js';
-    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js';
+const MAX_LEVEL = 5;
 
-    // === Data game ===
-    let resources = { beras: 0, jagung: 0, gandum: 0 };
-    let plots = { beras: 1, jagung: 1, gandum: 0 };
-    let level = 1;
+// Default game state
+let state = {
+  money: 50,
+  xp: 0,
+  level: 1,
+  cityProgress: 0,
+  plots: [], // will contain objects {status: 'empty'|'planted', type:'corn'|'rice', growth:0, daysToHarvest: n}
+  log: []
+};
 
-    const elements = {
-      berasCount: document.getElementById('beras-count'),
-      jagungCount: document.getElementById('jagung-count'),
-      gandumCount: document.getElementById('gandum-count'),
-      gandumDisplay: document.getElementById('gandum-display'),
-      gandumButton: document.getElementById('gandum-button'),
-      levelDisplay: document.getElementById('level'),
-      gameMessage: document.getElementById('game-message'),
-    };
+// Config
+const config = {
+  maxPlots: 9,
+  plotsByLevel: {1:3,2:4,3:6,4:8,5:9},
+  corn: {cost:10, days:3, reward:25, xp:12},
+  rice: {cost:8, days:2, reward:18, xp:9},
+  buildCost:50
+};
 
-    const costs = {
-      jagung: { beras: 2 },
-      beras: { jagung: 2 },
-      gandum: { beras: 3, jagung: 3 }
-    };
-    const upgradeCost = { level1: { beras: 10, jagung: 10 } };
+// init plots based on maxPlots
+for(let i=0;i<config.maxPlots;i++) state.plots.push({status:'empty'});
 
-    // === Three.js ===
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0d1a26);
+// DOM
+const moneyEl = document.getElementById('money');
+const xpEl = document.getElementById('xp');
+const levelEl = document.getElementById('level');
+const cityEl = document.getElementById('city');
+const fieldEl = document.getElementById('field');
+const logEl = document.getElementById('log');
+const xpBar = document.getElementById('xpBar');
+const cityProgressEl = document.getElementById('cityProgress');
 
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 8, 12);
+// Buttons
+const plantCornBtn = document.getElementById('plantCorn');
+const plantRiceBtn = document.getElementById('plantRice');
+const waterBtn = document.getElementById('waterBtn');
+const harvestBtn = document.getElementById('harvestBtn');
+const buildBtn = document.getElementById('buildBtn');
+const upgradeBtn = document.getElementById('upgradeBtn');
+const saveBtn = document.getElementById('saveBtn');
+const resetBtn = document.getElementById('resetBtn');
 
-    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias:true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+let selectedPlot = null;
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
+function log(text){
+  const time = new Date().toLocaleTimeString();
+  state.log.unshift('['+time+'] '+text);
+  renderLog();
+}
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambientLight);
+function renderLog(){
+  logEl.innerHTML = state.log.slice(0,200).map(l => '<div>'+l+'</div>').join('');
+}
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    dirLight.position.set(5,10,5);
-    dirLight.castShadow = true;
-    scene.add(dirLight);
+function render(){
+  moneyEl.textContent = state.money;
+  xpEl.textContent = state.xp;
+  levelEl.textContent = state.level;
+  cityProgressEl.textContent = state.cityProgress + '%';
+  xpBar.style.width = Math.min(100, Math.floor((state.xp / xpNeededForNext())*100)) + '%';
+  renderField();
+  renderCity();
+}
 
-    // Ground
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(30,30),
-      new THREE.MeshLambertMaterial({color:0x1a2e3d})
-    );
-    ground.rotation.x = -Math.PI/2;
-    scene.add(ground);
+function xpNeededForNext(){
+  // simple XP curve
+  if(state.level >= MAX_LEVEL) return Infinity;
+  return 20 * state.level; // e.g., level1->20, level2->40, etc
+}
 
-    // Loader
-    const loader = new GLTFLoader();
-    const loadedModels = {};
-    const plotPositions = [];
-    let plotCounter = 0;
+function renderField(){
+  fieldEl.innerHTML = '';
+  const open = config.plotsByLevel[state.level];
+  for(let i=0;i<config.maxPlots;i++){
+    const p = state.plots[i];
+    const div = document.createElement('div');
+    div.className = 'plot';
+    if(i >= open){ div.classList.add('locked'); div.textContent = 'Terkunci'; }
+    else if(p.status === 'empty'){ div.textContent = 'Kosong'; }
+    else if(p.status === 'planted'){
+      div.classList.add('planted');
+      const icon = p.type === 'corn' ? '🌽' : '🌾';
+      div.innerHTML = `<div style="text-align:center">${icon}<div style='font-size:12px;margin-top:6px'>${p.growth}/${p.daysToHarvest} hari</div></div>`;
+    }
+    div.dataset.index = i;
+    div.addEventListener('click', ()=>onPlotClick(i));
+    fieldEl.appendChild(div);
+  }
+}
 
-    for (let i=0;i<5;i++){
-      for (let j=0;j<5;j++){
-        plotPositions.push(new THREE.Vector3(i*3-6,0,j*3-6));
+function renderCity(){
+  cityEl.innerHTML = '';
+  // show basic buildings up to cityProgress
+  const buildings = ['Town Hall','Market','School','Factory','Park'];
+  for(let i=0;i<buildings.length;i++){
+    const b = document.createElement('div');
+    b.className = 'building';
+    const filled = (state.cityProgress >= (i+1)*20);
+    b.innerHTML = `<strong>${buildings[i]}</strong><div style='font-size:12px;margin-top:6px'>${filled? 'Beroperasi':'Kosong'}</div>`;
+    cityEl.appendChild(b);
+  }
+}
+
+function onPlotClick(index){
+  const open = config.plotsByLevel[state.level];
+  if(index >= open){ alert('Petak terkunci. Naik level untuk membuka petak baru.'); return; }
+  selectedPlot = index;
+  const p = state.plots[index];
+  if(p.status === 'empty'){
+    const choose = confirm('Tanam Jagung? (OK = Jagung) Cancel = Padi');
+    if(choose) plant('corn'); else plant('rice');
+  } else if(p.status === 'planted'){
+    const harvestNow = confirm('Panen sekarang? (OK = Panen) Cancel = Batal');
+    if(harvestNow) harvest(index);
+  }
+}
+
+function plant(type){
+  const cfg = config[type];
+  if(state.money < cfg.cost){ alert('Uang tidak cukup'); return; }
+  const idx = selectedPlot;
+  if(idx === null) { alert('Pilih petak dulu'); return; }
+  const p = state.plots[idx];
+  if(p.status === 'planted'){ alert('Petak sudah ditanami'); return; }
+  p.status = 'planted'; p.type = type; p.growth = 0; p.daysToHarvest = cfg.days;
+  state.money -= cfg.cost;
+  log('Menanam '+(type==='corn'?'Jagung':'Padi')+' di petak '+(idx+1));
+  save(); render();
+}
+
+plantCornBtn.addEventListener('click', ()=>{
+  // pick first empty open plot
+  const open = config.plotsByLevel[state.level];
+  let idx = state.plots.findIndex((p,i)=> i<open && p.status==='empty');
+  if(idx === -1) return alert('Tidak ada petak kosong terbuka. Klik petak kosong untuk menanam atau naik level.');
+  selectedPlot = idx; plant('corn');
+});
+plantRiceBtn.addEventListener('click', ()=>{
+  const open = config.plotsByLevel[state.level];
+  let idx = state.plots.findIndex((p,i)=> i<open && p.status==='empty');
+  if(idx === -1) return alert('Tidak ada petak kosong terbuka. Klik petak kosong untuk menanam atau naik level.');
+  selectedPlot = idx; plant('rice');
+});
+
+waterBtn.addEventListener('click', ()=>{
+  // simulate passing one day: increase growth for all planted
+  let any=false;
+  state.plots.forEach((p,i)=>{
+    if(p.status==='planted'){
+      p.growth += 1; any=true;
+      if(p.growth >= p.daysToHarvest){
+        log('Tanaman di petak '+(i+1)+' siap dipanen!');
       }
     }
+  });
+  if(!any) alert('Tidak ada tanaman untuk disiram.');
+  else { log('Menjalankan simulasi 1 hari (siraman)'); save(); render(); }
+});
 
-    function loadModels(){
-      const models = [
-        {key:'jagung', file:'assets/models/jagung.glb'},
-        {key:'beras', file:'assets/models/padi.glb'},
-        {key:'townhall', file:'assets/models/townhall.glb'}
-      ];
-      let loaded = 0;
-      models.forEach(m=>{
-        loader.load(m.file,(gltf)=>{
-          loadedModels[m.key] = gltf.scene;
-          loaded++;
-          if(loaded===models.length){
-            initializeGame();
-          }
-        },undefined,(e)=>console.error("Gagal load",m.file,e));
-      });
+harvestBtn.addEventListener('click', ()=>{
+  // harvest all ready crops
+  let harvested = 0;
+  state.plots.forEach((p,i)=>{
+    if(p.status==='planted' && p.growth >= p.daysToHarvest){
+      const cfg = config[p.type];
+      state.money += cfg.reward;
+      state.xp += cfg.xp;
+      log('Memanen '+(p.type==='corn'?'Jagung':'Padi')+' dari petak '+(i+1)+" (+"+cfg.reward+' uang, +'+cfg.xp+' XP)');
+      state.plots[i] = {status:'empty'};
+      harvested++;
     }
+  });
+  if(harvested===0) alert('Belum ada tanaman yang siap panen.');
+  else {
+    save(); checkLevelUp(); render();
+  }
+});
 
-    function add3DPlot(type){
-      if(plotCounter<plotPositions.length){
-        const modelKey = type;
-        if(!loadedModels[modelKey]){ console.warn("Model belum ada:",modelKey); return; }
-        const model = loadedModels[modelKey].clone();
-        model.scale.set(1,1,1);
-        model.position.copy(plotPositions[plotCounter]);
-        scene.add(model);
-        plotCounter++;
-      }
-    }
+buildBtn.addEventListener('click', ()=>{
+  if(state.money < config.buildCost) return alert('Uang kurang untuk membangun.');
+  state.money -= config.buildCost;
+  state.cityProgress = Math.min(100, state.cityProgress + 20);
+  log('Membangun fasilitas kota. Progress kota: '+state.cityProgress+'%');
+  save(); render();
+});
 
-    // === Logic Game ===
-    function updateUI(){
-      elements.berasCount.textContent = resources.beras;
-      elements.jagungCount.textContent = resources.jagung;
-      elements.gandumCount.textContent = resources.gandum;
-      elements.levelDisplay.textContent = level;
-    }
-    function showMessage(msg){
-      elements.gameMessage.textContent = msg;
-      setTimeout(()=>{ elements.gameMessage.textContent=''; },2500);
-    }
-    function harvest(){
-      resources.beras += plots.beras;
-      resources.jagung += plots.jagung;
-      resources.gandum += plots.gandum;
-      showMessage("Panen selesai!");
-      updateUI();
-    }
-    window.buyPlot = function(type){
-      const cost = costs[type];
-      let canBuy = true;
-      for(const res in cost){
-        if(resources[res]<cost[res]){ canBuy=false; showMessage(res+" tidak cukup!"); break; }
-      }
-      if(canBuy){
-        for(const res in cost){ resources[res]-=cost[res]; }
-        plots[type]++;
-        add3DPlot(type);
-        showMessage("Berhasil beli "+type+"!");
-        updateUI();
-      }
-    }
-    window.upgradeTownHall = function(){
-      if(level===1){
-        if(resources.beras>=upgradeCost.level1.beras && resources.jagung>=upgradeCost.level1.jagung){
-          resources.beras-=upgradeCost.level1.beras;
-          resources.jagung-=upgradeCost.level1.jagung;
-          level=2;
-          elements.gandumDisplay.classList.remove('hidden');
-          elements.gandumButton.classList.remove('hidden');
-          showMessage("Town Hall upgrade! Gandum tersedia.");
-          updateUI();
-        } else {
-          showMessage("Sumber daya tidak cukup!");
-        }
-      } else {
-        showMessage("Level max.");
-      }
-    }
+upgradeBtn.addEventListener('click', ()=>{
+  if(state.level >= MAX_LEVEL) return alert('Sudah level maksimal');
+  const need = xpNeededForNext();
+  if(state.xp < need) return alert('XP tidak cukup. Butuh '+need+' XP untuk naik ke level '+(state.level+1));
+  state.xp -= need;
+  state.level += 1;
+  log('Naik level! Sekarang level '+state.level);
+  save(); render();
+});
 
-    function initializeGame(){
-      add3DPlot('jagung');
-      add3DPlot('beras');
-      setInterval(harvest,10000); // panen tiap 10 detik (biar cepat test)
-      updateUI();
-      animate();
-    }
-    function animate(){
-      requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene,camera);
-    }
-    window.addEventListener('resize',()=>{
-      camera.aspect=window.innerWidth/window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth,window.innerHeight);
-    });
+saveBtn.addEventListener('click', ()=>{ save(true); });
+resetBtn.addEventListener('click', ()=>{
+  if(confirm('Reset permainan? Semua progress hilang.')){ localStorage.removeItem('farmcity.save'); location.reload(); }
+});
 
-    loadModels();
-  </script>
+function checkLevelUp(){
+  if(state.level >= MAX_LEVEL) return;
+  const need = xpNeededForNext();
+  if(state.xp >= need){
+    // auto prompt
+    if(confirm('Anda mendapatkan cukup XP untuk naik level! Naik sekarang?')){
+      state.xp -= need; state.level += 1; log('Naik level otomatis ke '+state.level);
+    }
+  }
+}
+
+function harvest(index){
+  const p = state.plots[index];
+  if(p.status !== 'planted' || p.growth < p.daysToHarvest) return alert('Belum siap panen');
+  const cfg = config[p.type];
+  state.money += cfg.reward;
+  state.xp += cfg.xp;
+  log('Memanen '+(p.type==='corn'?'Jagung':'Padi')+' dari petak '+(index+1)+' (+'+cfg.reward+' uang, +'+cfg.xp+' XP)');
+  state.plots[index] = {status:'empty'};
+  save(); render(); checkLevelUp();
+}
+
+// Persistence
+function save(userTriggered=false){
+  localStorage.setItem('farmcity.save', JSON.stringify(state));
+  if(userTriggered) alert('Permainan disimpan ke browser (localStorage).');
+}
+
+function load(){
+  const raw = localStorage.getItem('farmcity.save');
+  if(!raw) return;
+  try{ const s = JSON.parse(raw); Object.assign(state, s); }
+  catch(e){ console.error('Gagal memuat save',e); }
+}
+
+// initial load
+load(); render(); renderLog();
+
+// autosave every 20s
+setInterval(()=>save(),20000);
+
+// helpful tip: keyboard shortcuts
+window.addEventListener('keydown', e=>{
+  if(e.key==='1') plantCornBtn.click();
+  if(e.key==='2') plantRiceBtn.click();
+  if(e.key==='w') waterBtn.click();
+  if(e.key==='h') harvestBtn.click();
+});
+
+// End of script
+</script>
 </body>
 </html>
