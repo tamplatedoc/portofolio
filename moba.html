@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>MOBA Lite — Arena Top-down (inspired MOBA)</title>
+<style>
+  :root{--bg:#071028;--panel:#0b2540;--accent:#2db7b7}
+  *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  body{margin:0;background:linear-gradient(#05263a,#071028);color:#e6f7f7}
+  .wrap{max-width:1100px;margin:12px auto;padding:12px}
+  header{display:flex;justify-content:space-between;align-items:center}
+  canvas{display:block;width:100%;border-radius:8px;background:linear-gradient(#0a3670,#07213a);box-shadow:0 10px 30px rgba(0,0,0,.6)}
+  .hud{display:flex;gap:12px;align-items:center;margin-top:8px}
+  .card{background:var(--panel);padding:10px;border-radius:8px}
+  button{background:var(--accent);border:0;padding:8px 10px;border-radius:8px;color:#012;cursor:pointer}
+  .muted{color:#9fc}
+  .cols{display:flex;gap:12px;margin-top:8px}
+  .col{flex:1}
+  pre{white-space:pre-wrap}
+  @media(max-width:900px){ .cols{flex-direction:column} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>MOBA Lite — Arena Top-down (inspired MOBA)</h1>
+    <div><button id="restart">Restart</button></div>
+  </header>
+  <canvas id="game" width="1024" height="640"></canvas>
+  <div class="hud">
+    <div class="card col" style="min-width:260px">
+      <div><strong>Hero</strong> — Kontrol: WASD bergerak, Kiri mouse serang, Space abilitas 1 (Dash)</div>
+      <div style="margin-top:8px">HP: <span id="hp">0</span> | Gold: <span id="gold">0</span> | XP: <span id="xp">0</span> | Level: <span id="lvl">1</span></div>
+      <div style="margin-top:8px">Ability: Dash (cooldown: <span id="dashcd">0</span>s)</div>
+    </div>
+    <div class="card col">
+      <div><strong>Base</strong></div>
+      <div style="margin-top:8px">Musuh Base HP: <span id="enemyBaseHp">0</span></div>
+      <div style="margin-top:8px">Minion spawn setiap <span id="spawnRate">0</span>s</div>
+    </div>
+    <div class="card col">
+      <div><strong>Controls</strong></div>
+      <div style="margin-top:8px">Tombol: B buka shop, R beli health potion (50 gold)</div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="card col">
+      <h3>Log</h3>
+      <div id="log" style="height:140px;overflow:auto"></div>
+    </div>
+    <div class="card col">
+      <h3>Tips & Mode</h3>
+      <pre>Ini versi sederhana: 1 pemain (kamu) vs 1 AI hero + minions.
+Tujuan: hancurkan base lawan. Leveling memberi atribut.
+Semua aset berupa grafik vektor sederhana (lingkaran/rect) jadi bebas hak cipta.
+
+Mau penyesuaian? mis: add towers, 2 lane, shop lebih lengkap.</pre>
+    </div>
+  </div>
+</div>
+<script>
+/* MOBA Lite - simplified top-down arena
+   - Single-file HTML/Canvas
+   - Player hero vs enemy hero + minions
+   - Spawn minions from each base, they march along simple path
+   - Hero gains XP/gold from minion kills, can level up to 10
+   - One ability: Dash (damage on hit)
+   - Destroy enemy base to win
+   - Save highscore to localStorage
+*/
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// HUD elements
+const hpEl = document.getElementById('hp');
+const goldEl = document.getElementById('gold');
+const xpEl = document.getElementById('xp');
+const lvlEl = document.getElementById('lvl');
+const dashCdEl = document.getElementById('dashcd');
+const enemyBaseHpEl = document.getElementById('enemyBaseHp');
+const spawnRateEl = document.getElementById('spawnRate');
+const logEl = document.getElementById('log');
+
+let logLines = [];
+function log(msg){ logLines.unshift('['+new Date().toLocaleTimeString()+'] '+msg); logEl.innerHTML = logLines.slice(0,200).map(l=>'<div>'+l+'</div>').join(''); }
+
+// Game state
+let state = {
+  running: true,
+  spawnTimer: 0,
+  spawnInterval: 4.0, // seconds
+  time: 0,
+  lastSave: Date.now()
+};
+
+// Path (simple straight lane from left base to right base)
+const baseLeft = {x:120,y:H/2, w:120, h:160, hp:1200};
+const baseRight = {x:W-240,y:H/2, w:120, h:160, hp:1200};
+
+// Units arrays
+let minions = [];
+let projectiles = [];
+
+// Utility
+function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
+
+// Hero template
+function createHero(x,y,team){
+  return {
+    x,y, vx:0, vy:0, r:18, team, hp:200, maxHp:200,
+    speed:140, atkRange:36, atkDmg:18, atkCooldown:0.8, atkTimer:0,
+    xp:0, level:1, gold:0,
+    dashCd:0, dashCost:0,
+    target:null, isAI: team==='enemy'
+  };
+}
+
+let player = createHero(baseLeft.x + 180, H/2, 'ally');
+let enemyHero = createHero(baseRight.x - 180, H/2, 'enemy');
+
+// Spawn minion
+function spawnMinion(team){
+  const side = team === 'ally' ? 'left' : 'right';
+  const x = team==='ally' ? baseLeft.x + baseLeft.w + 20 : baseRight.x - baseRight.w - 20;
+  const dir = team==='ally' ? 1 : -1;
+  const m = {x, y: H/2 + (Math.random()*60-30), vx: 40*dir, hp:60, maxHp:60, team, atkDmg:10, r:12, target:null};
+  minions.push(m);
+}
+
+// AI behavior for enemy hero
+function enemyAI(dt){
+  // simple: move toward player if within 350, else push minions/base
+  const hero = enemyHero;
+  // target nearest enemy minion or player
+  let nearest = null; let nd = 1e9;
+  minions.forEach(m=>{ if(m.team==='ally'){ const d = dist(hero, m); if(d < nd){ nd = d; nearest = m; } } });
+  const dToPlayer = dist(hero, player);
+  if(dToPlayer < nd) { nd = dToPlayer; nearest = player; }
+
+  if(nearest){
+    // move toward target
+    const dx = nearest.x - hero.x, dy = nearest.y - hero.y; const d = Math.hypot(dx,dy) || 1;
+    hero.vx = (dx/d) * hero.speed;
+    hero.vy = (dy/d) * hero.speed;
+    // attack if close
+    if(d < hero.atkRange + 6 && hero.atkTimer<=0){ // attack
+      hero.atkTimer = hero.atkCooldown; nearest.hp -= hero.atkDmg; if(nearest.hp<=0){ onUnitKilled(nearest, hero); }
+    }
+  } else { hero.vx = -hero.speed*0.2; hero.vy = 0; }
+  // updates
+  hero.x += hero.vx * dt; hero.y += hero.vy * dt;
+  hero.atkTimer = Math.max(0, hero.atkTimer - dt);
+  hero.dashCd = Math.max(0, hero.dashCd - dt);
+}
+
+// Handle kills
+function onUnitKilled(unit, killer){
+  // remove unit if minion
+  if(unit===player || unit===enemyHero){
+    // hero died: respawn after short delay
+    if(unit===player){ log('Kamu tewas — respawn 3s'); player.hp = player.maxHp; player.x = baseLeft.x + 180; player.y = H/2; player.gold = Math.max( Math.floor(player.gold*0.6), 0); }
+    if(unit===enemyHero){ log('Musuh tewas — respawn'); enemyHero.hp = enemyHero.maxHp; enemyHero.x = baseRight.x - 180; enemyHero.y = H/2; }
+    return;
+  }
+  const idx = minions.indexOf(unit);
+  if(idx>=0) minions.splice(idx,1);
+  // reward killer
+  if(killer.team === 'ally'){ player.gold += 12; player.xp += 6; }
+  if(killer.team === 'enemy'){ enemyHero.gold = (enemyHero.gold||0) + 8; enemyHero.xp = (enemyHero.xp||0) + 4; }
+}
+
+// Player input
+const keys = {};
+window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()] = true; if(e.key==='b' || e.key==='B'){ openShop(); } if(e.key==='r' || e.key==='R'){ buyPotion(); } if(e.key===' ') useDash(); });
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+canvas.addEventListener('mousedown', e=>{ // attack towards mouse
+  const rect = canvas.getBoundingClientRect(); const mx = (e.clientX-rect.left) * (canvas.width/rect.width); const my = (e.clientY-rect.top) * (canvas.height/rect.height);
+  // if enemy in range, perform attack
+  const tgt = [...minions, enemyHero, player].filter(u=>u.team && u.team!=='ally').reduce((best,u)=>{ const d=dist({x:mx,y:my},u); return d<80 && (best==null || d<best.d) ? {u,d}:best; }, null);
+  if(tgt){ // basic attack: apply dmg directly if within atkRange
+    if(dist(player, tgt.u) < player.atkRange+20){ tgt.u.hp -= player.atkDmg; if(tgt.u.hp<=0) onUnitKilled(tgt.u, player); }
+  }
+});
+
+function useDash(){ if(player.dashCd>0) return; player.dashCd = 5.0; // cooldown 5s
+  // dash forward
+  player.x += 120; log('Dash!'); }
+
+function buyPotion(){ if(player.gold < 50) { alert('Gold kurang'); return; } player.gold -= 50; player.hp = Math.min(player.maxHp, player.hp + 80); log('Beli potion — +80 HP'); }
+function openShop(){ alert('Shop sederhana: R = beli potion (50 gold)'); }
+
+// Update loop
+let last = performance.now();
+function loop(now){ const dt = Math.min(0.05, (now-last)/1000); last=now; update(dt); render(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+function update(dt){ if(!state.running) return; state.time += dt; state.spawnTimer += dt;
+  // spawn minions
+  if(state.spawnTimer >= state.spawnInterval){ state.spawnTimer = 0; spawnMinion('ally'); spawnMinion('enemy'); }
+  // player movement
+  let mvx=0, mvy=0; if(keys['w']) mvy -=1; if(keys['s']) mvy +=1; if(keys['a']) mvx -=1; if(keys['d']) mvx +=1;
+  if(mvx!==0 || mvy!==0){ const L = Math.hypot(mvx,mvy)||1; player.vx = (mvx/L) * player.speed; player.vy = (mvy/L) * player.speed; } else { player.vx = player.vy = 0; }
+  player.x += player.vx * dt; player.y += player.vy * dt;
+  // clamp inside arena
+  player.x = Math.max(60, Math.min(W-60, player.x)); player.y = Math.max(60, Math.min(H-60, player.y));
+  // player attack auto if minion nearby
+  player.atkTimer = Math.max(0, (player.atkTimer||0) - dt);
+  if(player.atkTimer <= 0){ // try attack nearest hostile minion in range
+    let nearest = null; let nd = 1e9; [...minions, enemyHero].forEach(u=>{ if(u.team !== 'ally'){ const d = dist(player,u); if(d < player.atkRange + 6 && d < nd){ nd=d; nearest=u; } } });
+    if(nearest){ nearest.hp -= player.atkDmg; player.atkTimer = player.atkCooldown; if(nearest.hp<=0) onUnitKilled(nearest, player); }
+  }
+  // reduce cooldowns
+  player.dashCd = Math.max(0, (player.dashCd||0) - dt);
+  // update enemy AI
+  enemyAI(dt);
+  // update minions: they march toward enemy base
+  for(let i=minions.length-1;i>=0;i--){ const m=minions[i];
+    const dir = m.team==='ally' ? 1 : -1; m.x += m.vx * dt;
+    // attack enemy minion or hero in front
+    // check collision with opposing minion
+    let hit = null; for(const o of minions){ if(o.team !== m.team && Math.abs(o.x - m.x) < 22){ hit = o; break; } }
+    if(hit){ hit.hp -= m.atkDmg*dt*5; if(hit.hp<=0) onUnitKilled(hit, m); }
+    // check if reached enemy base
+    if(m.team==='ally' && m.x > baseRight.x - 30){ baseRight.hp -= m.atkDmg * dt * 20; minions.splice(i,1); log('Minion ally menyerang base musuh'); }
+    if(m.team==='enemy' && m.x < baseLeft.x + baseLeft.w + 30){ baseLeft.hp -= m.atkDmg * dt * 20; minions.splice(i,1); log('Minion musuh menyerang base kamu'); }
+  }
+  // projectiles
+  for(let i=projectiles.length-1;i>=0;i--){ const p=projectiles[i]; p.x += p.vx*dt; p.y += p.vy*dt; // collision
+    // check hit
+    const targets = p.team === 'ally' ? [...minions, enemyHero] : [...minions.filter(m=>m.team!=='enemy'), player];
+    for(const t of targets){ if(dist(p,t) < (t.r||12)+4){ t.hp -= p.dmg; projectiles.splice(i,1); if(t.hp<=0) onUnitKilled(t, p.owner); break; } }
+  }
+  // base win check
+  if(baseRight.hp <= 0){ log('Kamu memenangkan permainan! Base musuh hancur'); state.running = false; }
+  if(baseLeft.hp <= 0){ log('Base kamu hancur. Kalah.'); state.running = false; }
+  // update HUD
+  hpEl.textContent = Math.round(player.hp)+'/'+player.maxHp;
+  goldEl.textContent = Math.round(player.gold);
+  xpEl.textContent = Math.round(player.xp);
+  lvlEl.textContent = player.level;
+  dashCdEl.textContent = player.dashCd.toFixed(1);
+  enemyBaseHpEl.textContent = Math.round(baseRight.hp);
+  spawnRateEl.textContent = state.spawnInterval.toFixed(1);
+  // auto level up
+  if(player.xp >= xpNeeded(player.level) && player.level < 10){ player.xp -= xpNeeded(player.level); player.level++; player.maxHp += 30; player.atkDmg += 4; player.speed += 6; log('Naik level! Sekarang level '+player.level); }
+}
+
+function xpNeeded(lvl){ return 20 * lvl; }
+
+// Rendering
+function render(){ ctx.clearRect(0,0,W,H);
+  // draw arena background
+  ctx.fillStyle = '#0c2740'; ctx.fillRect(0,0,W,H);
+  // draw lane
+  ctx.fillStyle = '#10324a'; ctx.fillRect(0,H/2 - 80, W, 160);
+  // draw bases
+  drawBase(baseLeft); drawBase(baseRight);
+  // draw minions
+  minions.forEach(m=>{ ctx.beginPath(); ctx.fillStyle = m.team==='ally' ? '#6ad1a3' : '#ff8a8a'; ctx.arc(m.x, m.y, m.r, 0, Math.PI*2); ctx.fill(); // hp bar
+    drawHpBar(m.x - 18, m.y - 22, 36, 6, m.hp, m.maxHp); });
+  // draw heroes
+  drawHero(player); drawHero(enemyHero);
+  // draw projectiles
+  projectiles.forEach(p=>{ ctx.fillStyle='#ffd'; ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.fill(); });
+}
+
+function drawBase(b){ ctx.fillStyle = '#224466'; ctx.fillRect(b.x - b.w/2, b.y - b.h/2, b.w, b.h); ctx.fillStyle = '#88c'; ctx.fillRect(b.x - b.w/2 + 6, b.y - b.h/2 + 6, b.w - 12, 12); drawHpBar(b.x - 40, b.y + b.h/2 + 8, 80, 8, b.hp, 1200); }
+function drawHpBar(x,y,w,h,val,maxv){ ctx.fillStyle='#444'; ctx.fillRect(x,y,w,h); ctx.fillStyle='#2db7b7'; ctx.fillRect(x,y, Math.max(0, w*(val/maxv)), h); }
+function drawHero(h){ ctx.beginPath(); ctx.fillStyle = h.team==='ally' ? '#2de6a6' : '#ff9090'; ctx.arc(h.x, h.y, h.r, 0, Math.PI*2); ctx.fill(); // weapon direction indicator
+  ctx.fillStyle = '#fff'; ctx.fillRect(h.x - 6, h.y - h.r - 12, 12, 6); drawHpBar(h.x - 28, h.y - h.r - 24, 56, 8, h.hp, h.maxHp); }
+
+// Start/Restart
+document.getElementById('restart').addEventListener('click', ()=>{ location.reload(); });
+
+// autosave
+setInterval(()=>{ localStorage.setItem('mobalite.save', JSON.stringify({player, baseRight, baseLeft, minionsLength:minions.length})); }, 5000);
+
+log('Game dimulai — hancurkan base musuh!');
+
+</script>
+</body>
+</html>
