@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Slot Buah — Mesin Slot Buah-buahan</title>
+<style>
+  :root{--bg:#0b6623;--card:#fff;--accent:#ff595e;--muted:#e8f5e9}
+  *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  body{margin:0;background:linear-gradient(180deg,#07391f,#0f8b3a);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:var(--muted)}
+  .wrap{width:100%;max-width:900px}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  h1{margin:0;font-size:20px}
+  .card{background:rgba(255,255,255,0.06);padding:14px;border-radius:12px;backdrop-filter: blur(4px);box-shadow:0 8px 20px rgba(0,0,0,.3)}
+  .top{display:flex;gap:12px;align-items:center}
+  .stat{padding:10px;border-radius:10px;background:rgba(255,255,255,0.04);min-width:120px;text-align:center}
+  .game{display:flex;gap:16px;margin-top:16px;align-items:center}
+  .reel{width:140px;height:160px;background:linear-gradient(180deg,#fff,#f0fff0);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:8px;border:6px solid rgba(0,0,0,0.12);overflow:hidden;position:relative}
+  .strip{display:flex;flex-direction:column;align-items:center;transform:translateY(0);transition:transform 0.9s cubic-bezier(.2,.8,.2,1)}
+  .sym{font-size:44px;height:56px;display:flex;align-items:center;justify-content:center;width:100%}
+  .controls{display:flex;flex-direction:column;gap:8px}
+  .controls .row{display:flex;gap:8px}
+  button{border:0;background:var(--accent);color:white;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+  button.secondary{background:rgba(255,255,255,0.12);color:var(--muted)}
+  .bet{display:flex;gap:8px;align-items:center}
+  .log{margin-top:12px;height:140px;overflow:auto;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:14px}
+  .payout{margin-top:12px;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px}
+  footer{margin-top:12px;text-align:center;color:rgba(255,255,255,0.6);font-size:13px}
+  @media(max-width:800px){ .game{flex-direction:column;align-items:center} .reel{width:86vw;max-width:300px;height:120px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="card">
+    <div style="display:flex;align-items:center;gap:12px">
+      <h1>Slot Buah — Mesin Slot Buah-buahan</h1>
+      <div class="small muted">(Simpan otomatis di browser)</div>
+    </div>
+    <div class="top">
+      <div class="stat">💳 Kredit: <strong id="credits">1000</strong></div>
+      <div class="stat">🎯 Taruhan: <strong id="betVal">10</strong></div>
+      <div class="stat">🏆 Kemenangan Terbesar: <strong id="bestWin">0</strong></div>
+    </div>
+  </header>
+
+  <div class="card" style="margin-top:12px">
+    <div class="game">
+      <div class="reel" id="reel1"><div class="strip" id="strip1"></div></div>
+      <div class="reel" id="reel2"><div class="strip" id="strip2"></div></div>
+      <div class="reel" id="reel3"><div class="strip" id="strip3"></div></div>
+
+      <div class="controls">
+        <div class="row">
+          <div class="bet">Taruhan: <input id="bet" type="number" min="1" step="1" value="10" style="width:90px;margin-left:8px;padding:6px;border-radius:6px;border:0;background:rgba(255,255,255,0.04);color:var(--muted)"></div>
+        </div>
+        <div class="row">
+          <button id="spinBtn">SPIN</button>
+          <button id="maxBtn" class="secondary">MAX</button>
+        </div>
+        <div class="row">
+          <button id="autoplay" class="secondary">Autoplay: Off</button>
+          <button id="resetBtn" class="secondary">Reset</button>
+        </div>
+        <div class="row">
+          <button id="collectBtn" class="secondary">Ambil Kemenangan</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="payout card" style="margin-top:12px">
+      <strong>Tabel Pembayaran</strong>
+      <ul>
+        <li>🍒🍒🍒 = 50× taruhan</li>
+        <li>🍋🍋🍋 = 30× taruhan</li>
+        <li>🍊🍊🍊 = 20× taruhan</li>
+        <li>🍉🍉🍉 = 15× taruhan</li>
+        <li>🍇🍇🍇 = 10× taruhan</li>
+        <li>2 buah sama = 2× taruhan</li>
+        <li>🍒 satu saja = 1× taruhan</li>
+      </ul>
+    </div>
+
+    <div class="log" id="log"></div>
+
+  </div>
+
+  <footer>Untuk hosting: simpan file ini sebagai <code>index.html</code> dan push ke repo GitHub — aktifkan GitHub Pages.</footer>
+</div>
+
+<script>
+/* Slot Buah — single-file HTML/JS
+   - 3 reels, emoji fruits
+   - taruhan, kredit, autoplay, payout table
+   - simpan di localStorage
+*/
+
+const symbols = ['🍒','🍋','🍊','🍉','🍇','🍓'];
+const weights = [12, 18, 16, 10, 9, 8]; // relative frequency (more cherries)
+
+// DOM
+const creditsEl = document.getElementById('credits');
+const betInput = document.getElementById('bet');
+const betValEl = document.getElementById('betVal');
+const bestWinEl = document.getElementById('bestWin');
+const spinBtn = document.getElementById('spinBtn');
+const maxBtn = document.getElementById('maxBtn');
+const autoplayBtn = document.getElementById('autoplay');
+const resetBtn = document.getElementById('resetBtn');
+const collectBtn = document.getElementById('collectBtn');
+const logEl = document.getElementById('log');
+const stripEls = [document.getElementById('strip1'), document.getElementById('strip2'), document.getElementById('strip3')];
+
+let state = { credits: 1000, bet: 10, bestWin: 0, lastWin: 0, autoplay:false };
+let spinning = false;
+
+// Utilities
+function randSymbol(){
+  const total = weights.reduce((a,b)=>a+b,0);
+  let r = Math.floor(Math.random()*total);
+  for(let i=0;i<weights.length;i++){ r -= weights[i]; if(r < 0) return symbols[i]; }
+  return symbols[0];
+}
+
+function createStripArray(){
+  const arr = [];
+  // create long randomized strip to simulate reel
+  for(let i=0;i<60;i++) arr.push(randSymbol());
+  return arr;
+}
+
+function renderStrip(el, arr){
+  el.innerHTML = '';
+  // add some padding items for smoother animation
+  arr.forEach(s=>{ const d = document.createElement('div'); d.className='sym'; d.textContent = s; el.appendChild(d); });
+}
+
+// init strips
+const strips = [createStripArray(), createStripArray(), createStripArray()];
+strips.forEach((s,i)=> renderStrip(stripEls[i], s));
+
+function updateHUD(){ creditsEl.textContent = state.credits; betValEl.textContent = state.bet; bestWinEl.textContent = state.bestWin; }
+function log(msg){ state.log = state.log || []; state.log.unshift('['+new Date().toLocaleTimeString()+'] '+msg); logEl.innerHTML = state.log.slice(0,200).map(l=>'<div>'+l+'</div>').join(''); }
+
+function save(){ localStorage.setItem('fruit.slot', JSON.stringify(state)); }
+function load(){ try{ const raw = localStorage.getItem('fruit.slot'); if(raw) Object.assign(state, JSON.parse(raw)); }catch(e){} updateHUD(); }
+load();
+
+// Spin logic
+function spin(){
+  if(spinning) return; if(state.credits < state.bet) return alert('Kredit tidak cukup');
+  spinning = true; state.credits -= state.bet; updateHUD(); log('Memutar (taruhan '+state.bet+')');
+
+  // prepare random stops
+  const results = [randSymbol(), randSymbol(), randSymbol()];
+
+  // for each reel, build a strip where a chosen result sits at specific index
+  const durations = [900, 1400, 2000];
+  stripEls.forEach((el, i)=>{
+    const arr = [];
+    // take current reel array and insert the result near center
+    for(let k=0;k<50;k++) arr.push(randSymbol());
+    // ensure at least one exact result in middle area
+    const mid = 22 + i*2 + Math.floor(Math.random()*4);
+    arr[mid] = results[i];
+    renderStrip(el, arr);
+    // trigger animation by translating Y
+    requestAnimationFrame(()=>{
+      el.style.transition = `transform ${durations[i]}ms cubic-bezier(.2,.9,.2,1)`;
+      const itemHeight = 56; // height of .sym
+      const targetIndex = mid; // position to center
+      const offset = -(targetIndex - 1) * itemHeight; // adjust
+      el.style.transform = `translateY(${offset}px)`;
+    });
+  });
+
+  // after all done, evaluate
+  setTimeout(()=>{
+    // read middle symbol of each strip (approx)
+    const visible = [];
+    stripEls.forEach(el=>{
+      // middle element roughly index 1 after transform -> pick the element currently at center
+      const children = Array.from(el.children);
+      // find element with transform nearest center by picking element at index 1
+      // because we constructed arr with middle at index mid, we can pick element at index 1
+      // safer: pick Math.round(children.length/2)
+      const idx = 22; // our chosen mid index from above
+      const txt = children[idx] ? children[idx].textContent : children[Math.floor(children.length/2)].textContent;
+      visible.push(txt);
+    });
+
+    const win = evaluate(visible, state.bet);
+    state.lastWin = win;
+    if(win > 0){ state.credits += win; log('Menang: '+win+' (hasil: '+visible.join(' | ')+')'); if(win > state.bestWin) state.bestWin = win; }
+    else log('Kalah (hasil: '+visible.join(' | ')+')');
+    updateHUD(); save(); spinning=false;
+    // clear transitions
+    stripEls.forEach(el=>{ el.style.transition='none'; });
+    // autoplay
+    if(state.autoplay && state.credits >= state.bet){ setTimeout(()=>spin(), 600); }
+  }, 2300);
+}
+
+function evaluate(visible, bet){
+  // visible: array of 3 symbols
+  const [a,b,c] = visible;
+  // three same
+  if(a===b && b===c){
+    switch(a){
+      case '🍒': return bet * 50;
+      case '🍋': return bet * 30;
+      case '🍊': return bet * 20;
+      case '🍉': return bet * 15;
+      case '🍇': return bet * 10;
+      case '🍓': return bet * 8;
+      default: return bet * 5;
+    }
+  }
+  // two same
+  if(a===b || a===c || b===c) return bet * 2;
+  // single cherry gives bet back
+  if(a==='🍒' || b==='🍒' || c==='🍒') return bet * 1;
+  return 0;
+}
+
+spinBtn.addEventListener('click', ()=> spin());
+maxBtn.addEventListener('click', ()=>{ const maxBet = Math.max(1, Math.floor(state.credits/4)); state.bet = Math.min(200, maxBet); betInput.value = state.bet; updateHUD(); });
+
+betInput.addEventListener('change', ()=>{ let v = parseInt(betInput.value)||1; if(v < 1) v = 1; state.bet = v; betInput.value = v; updateHUD(); save(); });
+
+autoplayBtn.addEventListener('click', ()=>{ state.autoplay = !state.autoplay; autoplayBtn.textContent = 'Autoplay: '+(state.autoplay? 'On':'Off'); if(state.autoplay && !spinning){ spin(); } save(); });
+resetBtn.addEventListener('click', ()=>{ if(confirm('Reset permainan dan kredit?')){ localStorage.removeItem('fruit.slot'); state = { credits:1000, bet:10, bestWin:0, lastWin:0, autoplay:false }; load(); save(); log('Permainan di-reset'); } });
+collectBtn.addEventListener('click', ()=>{ if(state.lastWin > 0){ alert('Kamu sudah mengambil kemenangan otomatis. Kredit saat ini: '+state.credits); } else alert('Belum ada kemenangan untuk dikoleksi.'); });
+
+// small keyboard shortcuts
+window.addEventListener('keydown', e=>{ if(e.key === ' ') spin(); if(e.key === 'a') { autoplayBtn.click(); } });
+
+// init HUD and log
+updateHUD(); log('Selamat datang!');
+
+</script>
+</body>
+</html>
