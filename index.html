@@ -1,388 +1,254 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Futuristic Farming — Fixed</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        :root{--accent:#00f0ff;--bg:#0d1a26;--hud-bg:rgba(13,26,38,0.8)}
-        html,body{height:100%;}
-        body {
-            background-color: var(--bg);
-            color: var(--accent);
-            font-family: 'Roboto Mono', monospace;
-            text-align: center;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow: hidden;
-        }
-
-        .game-container {
-            position: relative;
-            width: 100%;
-            height: 100vh;
-        }
-
-        .hud {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            justify-content: space-around;
-            width: 80%;
-            max-width: 680px;
-            background-color: var(--hud-bg);
-            border: 2px solid var(--accent);
-            box-shadow: 0 0 15px var(--accent);
-            padding: 10px;
-            z-index: 10;
-            gap: 12px;
-            border-radius: 8px;
-        }
-
-        .resource {
-            font-size: 1rem;
-            text-shadow: 0 0 5px var(--accent);
-        }
-
-        #game-canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-
-        .actions {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        button {
-            background-color: rgba(0, 240, 255, 0.08);
-            color: var(--accent);
-            border: 1px solid var(--accent);
-            padding: 10px 16px;
-            font-family: 'Roboto Mono', monospace;
-            cursor: pointer;
-            text-transform: uppercase;
-            box-shadow: 0 0 8px var(--accent);
-            transition: all 0.18s ease;
-            border-radius: 6px;
-        }
-
-        button:hover { transform: translateY(-2px); box-shadow: 0 0 20px var(--accent);} 
-        button:disabled{ opacity:0.35; cursor:not-allowed; transform:none; }
-
-        .message {
-            position: absolute;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            color: #7fff7f;
-            text-shadow: 0 0 6px #7fff7f;
-            padding: 6px 10px;
-            border-radius: 6px;
-            background: rgba(0,0,0,0.35);
-            min-width: 160px;
-        }
-
-        .hidden { display: none; }
-
-        /* small screens tweak */
-        @media (max-width:540px){ .hud{ width:92%; flex-direction:column; align-items:center } }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Futuristic Farming</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+    body {
+      background-color: #0d1a26;
+      color: #00f0ff;
+      font-family: 'Roboto Mono', monospace;
+      margin: 0;
+      overflow: hidden;
+    }
+    .hud {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 20px;
+      padding: 10px;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid #00f0ff;
+      box-shadow: 0 0 10px #00f0ff;
+      z-index: 10;
+    }
+    .resource { text-shadow: 0 0 5px #00f0ff; }
+    .actions {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 10;
+    }
+    button {
+      background: rgba(0,240,255,0.1);
+      border: 1px solid #00f0ff;
+      color: #00f0ff;
+      padding: 10px 15px;
+      cursor: pointer;
+      text-transform: uppercase;
+      font-family: 'Roboto Mono', monospace;
+      box-shadow: 0 0 10px #00f0ff;
+    }
+    button:hover {
+      background: rgba(0,240,255,0.3);
+      box-shadow: 0 0 20px #00f0ff;
+    }
+    .message {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #00ff00;
+      text-shadow: 0 0 5px #00ff00;
+      z-index: 10;
+    }
+    .hidden { display: none; }
+    canvas { display:block; }
+  </style>
 </head>
 <body>
 
-    <div class="game-container">
-        <div class="hud">
-            <div class="resource">Beras: <span id="beras-count">0</span></div>
-            <div class="resource">Jagung: <span id="jagung-count">0</span></div>
-            <div class="resource hidden" id="gandum-display">Gandum: <span id="gandum-count">0</span></div>
-            <div class="resource">Level: <span id="level">1</span></div>
-        </div>
+  <div class="hud">
+    <div class="resource">Beras: <span id="beras-count">0</span></div>
+    <div class="resource">Jagung: <span id="jagung-count">0</span></div>
+    <div class="resource hidden" id="gandum-display">Gandum: <span id="gandum-count">0</span></div>
+    <div class="resource">Level: <span id="level">1</span></div>
+  </div>
 
-        <canvas id="game-canvas"></canvas>
+  <div class="actions">
+    <button onclick="buyPlot('jagung')">Beli Jagung (2B)</button>
+    <button onclick="buyPlot('beras')">Beli Beras (2J)</button>
+    <button onclick="buyPlot('gandum')" id="gandum-button" class="hidden">Beli Gandum (3B,3J)</button>
+    <button onclick="upgradeTownHall()">Town Hall (10B,10J)</button>
+  </div>
 
-        <div class="actions">
-            <button onclick="buyPlot('jagung')">Beli Jagung (2B)</button>
-            <button onclick="buyPlot('beras')">Beli Beras (2J)</button>
-            <button onclick="buyPlot('gandum')" id="gandum-button" class="hidden">Beli Gandum (3B, 3J)</button>
-            <button onclick="upgradeTownHall()">Town Hall (10B, 10J)</button>
-        </div>
-        
-        <div class="message" id="game-message"></div>
-    </div>
+  <div class="message" id="game-message"></div>
+  <canvas id="game-canvas"></canvas>
 
-    <script type="module">
-        // ----- Dependensi three.js (versi konsisten) -----
-        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js';
-        import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js';
-        import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js';
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js';
+    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js';
 
-        // --- Data game dasar ---
-        // NOTE: saya set sedikit resource awal untuk memudahkan testing.
-        let resources = { beras: 5, jagung: 5, gandum: 0 };
-        let plots = { beras: 1, jagung: 1, gandum: 0 };
-        let level = 1;
+    // === Data game ===
+    let resources = { beras: 0, jagung: 0, gandum: 0 };
+    let plots = { beras: 1, jagung: 1, gandum: 0 };
+    let level = 1;
 
-        const elements = {
-            berasCount: document.getElementById('beras-count'),
-            jagungCount: document.getElementById('jagung-count'),
-            gandumCount: document.getElementById('gandum-count'),
-            gandumDisplay: document.getElementById('gandum-display'),
-            gandumButton: document.getElementById('gandum-button'),
-            levelDisplay: document.getElementById('level'),
-            gameMessage: document.getElementById('game-message'),
-        };
+    const elements = {
+      berasCount: document.getElementById('beras-count'),
+      jagungCount: document.getElementById('jagung-count'),
+      gandumCount: document.getElementById('gandum-count'),
+      gandumDisplay: document.getElementById('gandum-display'),
+      gandumButton: document.getElementById('gandum-button'),
+      levelDisplay: document.getElementById('level'),
+      gameMessage: document.getElementById('game-message'),
+    };
 
-        const costs = {
-            'jagung': { beras: 2 },
-            'beras': { jagung: 2 },
-            'gandum': { beras: 3, jagung: 3 }
-        };
-        const upgradeCost = { level1: { beras: 10, jagung: 10 } };
+    const costs = {
+      jagung: { beras: 2 },
+      beras: { jagung: 2 },
+      gandum: { beras: 3, jagung: 3 }
+    };
+    const upgradeCost = { level1: { beras: 10, jagung: 10 } };
 
-        // Grid posisi lahan
-        const plotPositions = [];
-        for (let i = 0; i < 5; i++) {
-            for (let j = 0; j < 5; j++) {
-                plotPositions.push(new THREE.Vector3(i * 3 - 6, 0, j * 3 - 6));
-            }
+    // === Three.js ===
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d1a26);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 8, 12);
+
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias:true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(5,10,5);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    // Ground
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(30,30),
+      new THREE.MeshLambertMaterial({color:0x1a2e3d})
+    );
+    ground.rotation.x = -Math.PI/2;
+    scene.add(ground);
+
+    // Loader
+    const loader = new GLTFLoader();
+    const loadedModels = {};
+    const plotPositions = [];
+    let plotCounter = 0;
+
+    for (let i=0;i<5;i++){
+      for (let j=0;j<5;j++){
+        plotPositions.push(new THREE.Vector3(i*3-6,0,j*3-6));
+      }
+    }
+
+    function loadModels(){
+      const models = [
+        {key:'jagung', file:'assets/models/jagung.glb'},
+        {key:'beras', file:'assets/models/padi.glb'},
+        {key:'townhall', file:'assets/models/townhall.glb'}
+      ];
+      let loaded = 0;
+      models.forEach(m=>{
+        loader.load(m.file,(gltf)=>{
+          loadedModels[m.key] = gltf.scene;
+          loaded++;
+          if(loaded===models.length){
+            initializeGame();
+          }
+        },undefined,(e)=>console.error("Gagal load",m.file,e));
+      });
+    }
+
+    function add3DPlot(type){
+      if(plotCounter<plotPositions.length){
+        const modelKey = type;
+        if(!loadedModels[modelKey]){ console.warn("Model belum ada:",modelKey); return; }
+        const model = loadedModels[modelKey].clone();
+        model.scale.set(1,1,1);
+        model.position.copy(plotPositions[plotCounter]);
+        scene.add(model);
+        plotCounter++;
+      }
+    }
+
+    // === Logic Game ===
+    function updateUI(){
+      elements.berasCount.textContent = resources.beras;
+      elements.jagungCount.textContent = resources.jagung;
+      elements.gandumCount.textContent = resources.gandum;
+      elements.levelDisplay.textContent = level;
+    }
+    function showMessage(msg){
+      elements.gameMessage.textContent = msg;
+      setTimeout(()=>{ elements.gameMessage.textContent=''; },2500);
+    }
+    function harvest(){
+      resources.beras += plots.beras;
+      resources.jagung += plots.jagung;
+      resources.gandum += plots.gandum;
+      showMessage("Panen selesai!");
+      updateUI();
+    }
+    window.buyPlot = function(type){
+      const cost = costs[type];
+      let canBuy = true;
+      for(const res in cost){
+        if(resources[res]<cost[res]){ canBuy=false; showMessage(res+" tidak cukup!"); break; }
+      }
+      if(canBuy){
+        for(const res in cost){ resources[res]-=cost[res]; }
+        plots[type]++;
+        add3DPlot(type);
+        showMessage("Berhasil beli "+type+"!");
+        updateUI();
+      }
+    }
+    window.upgradeTownHall = function(){
+      if(level===1){
+        if(resources.beras>=upgradeCost.level1.beras && resources.jagung>=upgradeCost.level1.jagung){
+          resources.beras-=upgradeCost.level1.beras;
+          resources.jagung-=upgradeCost.level1.jagung;
+          level=2;
+          elements.gandumDisplay.classList.remove('hidden');
+          elements.gandumButton.classList.remove('hidden');
+          showMessage("Town Hall upgrade! Gandum tersedia.");
+          updateUI();
+        } else {
+          showMessage("Sumber daya tidak cukup!");
         }
-        let plotCounter = 0;
+      } else {
+        showMessage("Level max.");
+      }
+    }
 
-        // three.js - scene, camera, renderer
-        const canvas = document.getElementById('game-canvas');
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        renderer.setClearColor(0x0d1a26);
+    function initializeGame(){
+      add3DPlot('jagung');
+      add3DPlot('beras');
+      setInterval(harvest,10000); // panen tiap 10 detik (biar cepat test)
+      updateUI();
+      animate();
+    }
+    function animate(){
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene,camera);
+    }
+    window.addEventListener('resize',()=>{
+      camera.aspect=window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth,window.innerHeight);
+    });
 
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.07;
-        controls.minDistance = 6;
-        controls.maxDistance = 30;
-        controls.minPolarAngle = Math.PI / 6;
-        controls.maxPolarAngle = Math.PI / 2.2;
-
-        // Lampu
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
-
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9); // <-- perbaikan: DirectionalLight
-        directionalLight.position.set(5, 10, 5);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.camera.left = -20;
-        directionalLight.shadow.camera.right = 20;
-        directionalLight.shadow.camera.top = 20;
-        directionalLight.shadow.camera.bottom = -20;
-        scene.add(directionalLight);
-
-        // Ground
-        const groundGeometry = new THREE.PlaneGeometry(50, 50);
-        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x1a2e3d });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        scene.add(ground);
-
-        // Loader dan koleksi model
-        const loader = new GLTFLoader();
-        const loadedModels = {};
-
-        function normalizeModel(model, desiredSize = 1.2){
-            // Mengecek bounding box, skala, dan center agar ukuran model seragam
-            const box = new THREE.Box3().setFromObject(model);
-            const size = new THREE.Vector3();
-            box.getSize(size);
-            const maxAxis = Math.max(size.x, size.y, size.z);
-            const scale = (maxAxis > 0) ? (desiredSize / maxAxis) : 1;
-            model.scale.set(scale, scale, scale);
-
-            // center model at origin
-            const center = new THREE.Vector3();
-            box.getCenter(center);
-            model.position.sub(center.multiplyScalar(scale));
-
-            // Pastikan mesh mewarisi shadow
-            model.traverse(child => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
-        }
-
-        function loadModels(){
-            const modelsToLoad = ['jagung.gltf','padi.gltf','townhall.gltf'];
-            let loaded = 0;
-            modelsToLoad.forEach(name => {
-                const path = `assets/models/${name}`;
-                loader.load(
-                    path,
-                    (gltf) => {
-                        const key = name.split('.')[0];
-                        const m = gltf.scene.clone();
-                        normalizeModel(m, 1.2);
-                        loadedModels[key] = m;
-                        loaded++;
-                        console.log(`Model terload: ${key}`);
-                        if (loaded === modelsToLoad.length) {
-                            console.log('Semua model berhasil dimuat');
-                            initializeGame();
-                        }
-                    },
-                    (xhr) => {
-                        if (xhr.total) console.log(`Memuat ${name}: ${(xhr.loaded/xhr.total*100).toFixed(2)}%`);
-                    },
-                    (err) => { console.error(`Gagal memuat ${path}:`, err); loaded++; if (loaded === modelsToLoad.length) initializeGame(); }
-                );
-            });
-        }
-
-        // fallback visual kalau model tidak ada
-        function createPlaceholder(type){
-            const geo = new THREE.CylinderGeometry(0.5, 0.5, 0.2, 8);
-            const mat = new THREE.MeshStandardMaterial({ color: type === 'jagung' ? 0xffd86b : (type === 'beras' ? 0xffffff : 0x8b5a2b) });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.castShadow = true; mesh.receiveShadow = true;
-            return mesh;
-        }
-
-        function add3DPlot(type){
-            if (plotCounter >= plotPositions.length){ showMessage('Lahan sudah penuh!'); return; }
-            const modelKey = (type === 'beras') ? 'padi' : type; // padi untuk beras
-            let model;
-            if (loadedModels[modelKey]){
-                // clone untuk instance baru
-                model = loadedModels[modelKey].clone(true);
-            } else {
-                console.warn(`Model ${modelKey} belum tersedia, gunakan placeholder.`);
-                model = createPlaceholder(type);
-            }
-            const pos = plotPositions[plotCounter];
-            model.position.set(pos.x, pos.y + 0.1, pos.z);
-            scene.add(model);
-            plotCounter++;
-        }
-
-        // UI dan game logic
-        window.buyPlot = buyPlot;
-        window.upgradeTownHall = upgradeTownHall;
-
-        function updateUI(){
-            elements.berasCount.textContent = resources.beras;
-            elements.jagungCount.textContent = resources.jagung;
-            elements.gandumCount.textContent = resources.gandum;
-            elements.levelDisplay.textContent = level;
-
-            // disable/enable tombol sesuai resource
-            // sederhana: cek masing-masing cost
-            document.querySelectorAll('.actions button').forEach(btn => btn.disabled = false);
-            if (resources.beras < (costs.jagung.beras || 0)) document.querySelector('button[onclick="buyPlot(\'jagung\')"]').disabled = true;
-            if (resources.jagung < (costs.beras.jagung || 0)) document.querySelector('button[onclick="buyPlot(\'beras\')"]').disabled = true;
-            if (level < 2) elements.gandumButton.classList.add('hidden');
-        }
-
-        function showMessage(msg, timeout = 3000){
-            elements.gameMessage.textContent = msg;
-            elements.gameMessage.classList.remove('hidden');
-            setTimeout(()=>{ elements.gameMessage.textContent = ''; }, timeout);
-        }
-
-        function harvest(){
-            resources.beras += plots.beras;
-            resources.jagung += plots.jagung;
-            resources.gandum += plots.gandum;
-            showMessage(`Panen! +${plots.beras} beras, +${plots.jagung} jagung`);
-            updateUI();
-        }
-
-        function buyPlot(type){
-            if (plotCounter >= plotPositions.length){ showMessage('Lahan sudah penuh!'); return; }
-            const cost = costs[type];
-            let canBuy = true;
-            for (const r in cost){ if (resources[r] < cost[r]){ canBuy = false; showMessage(`${r} tidak cukup!`); break; } }
-            if (!canBuy) return;
-            for (const r in cost) resources[r] -= cost[r];
-            plots[type]++;
-            add3DPlot(type);
-            showMessage(`Berhasil membeli petak ${type}!`);
-            updateUI();
-        }
-
-        function upgradeTownHall(){
-            if (level === 1){
-                if (resources.beras >= upgradeCost.level1.beras && resources.jagung >= upgradeCost.level1.jagung){
-                    resources.beras -= upgradeCost.level1.beras;
-                    resources.jagung -= upgradeCost.level1.jagung;
-                    level = 2;
-                    showMessage('Town Hall di-upgrade ke Level 2! Gandum sekarang tersedia!');
-                    elements.gandumDisplay.classList.remove('hidden');
-                    elements.gandumButton.classList.remove('hidden');
-                    updateUI();
-                } else {
-                    showMessage('Sumber daya tidak cukup untuk Level 2!');
-                }
-            } else {
-                showMessage('Town Hall sudah mencapai level maksimum.');
-            }
-        }
-
-        // Inisialisasi game setelah model ter-load atau fallback
-        function initializeGame(){
-            // pasang dua plot awal (agar ada sesuatu terlihat)
-            add3DPlot('jagung');
-            add3DPlot('beras');
-
-            camera.position.set(0, 8, 12);
-            camera.lookAt(0, 0, 0);
-
-            updateUI();
-
-            // Panen otomatis setiap 5 detik (untuk testing). Ganti ke 60000 untuk 1 menit.
-            setInterval(harvest, 5000);
-
-            animate();
-        }
-
-        // animasi loop
-        function animate(){
-            requestAnimationFrame(animate);
-            // rotate sedikit scene agar terasa hidup
-            scene.rotation.y += 0.0005;
-            controls.update();
-            renderer.render(scene, camera);
-        }
-
-        // resize
-        window.addEventListener('resize', ()=>{
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        // mulai muat model
-        loadModels();
-
-        // Jika kamu mau menonaktifkan resource awal (supaya mulai dari 0), ubah variable 'resources' di atas.
-
-    </script>
+    loadModels();
+  </script>
 </body>
 </html>
-
