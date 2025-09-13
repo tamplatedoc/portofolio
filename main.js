@@ -1,8 +1,11 @@
 // main.js
 
 // Impor Three.js dan OrbitControls
+
+// ====== IMPOR LIBRARY =======
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js';
 
 // ====== SETUP GAME UTAMA =======
 let resources = { beras: 0, jagung: 0, gandum: 0 };
