@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clash of Clans: Versi Solo</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #1a1a1a;
+            color: #d4d4d4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .game-container {
+            width: 90%;
+            max-width: 800px;
+            padding: 20px;
+            border: 2px solid #555;
+            background-color: #2b2b2b;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+
+        .resource {
+            padding: 5px 10px;
+            background-color: #3a3a3a;
+            border: 1px solid #555;
+        }
+
+        .content {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .column {
+            flex: 1;
+            padding: 10px;
+            border: 1px dashed #555;
+            text-align: left;
+        }
+
+        .log {
+            flex: 2;
+            height: 250px;
+            overflow-y: auto;
+            border: 1px solid #555;
+            background-color: #3a3a3a;
+            padding: 10px;
+            text-align: left;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            background-color: #4a4a4a;
+            color: #d4d4d4;
+            border: 1px solid #777;
+            padding: 10px 15px;
+            cursor: pointer;
+            font-family: 'Courier New', Courier, monospace;
+            text-transform: uppercase;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #6a6a6a;
+        }
+
+        .disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        h2 {
+            border-bottom: 1px solid #555;
+        }
+
+        .building-item, .troop-item {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Clash of Clans: Versi Solo</h1>
+        <div class="header" id="game-header">
+            <div class="resource">💰 Emas: <span id="gold">0</span></div>
+            <div class="resource">💧 Elixir: <span id="elixir">0</span></div>
+            <div class="resource">🏆 Trofi: <span id="trophies">0</span></div>
+            <div class="resource">⚔️ Pasukan: <span id="troops">0</span> / <span id="troop-capacity">5</span></div>
+        </div>
+
+        <div class="content">
+            <div class="column">
+                <h2>Bangun</h2>
+                <div id="buildings-list">
+                    <div class="building-item">
+                        <p>Bangunan Pusat</p>
+                        <p>Level: <span id="townhall-level">1</span></p>
+                        <button onclick="upgradeBuilding('townhall')">Upgrade</button>
+                    </div>
+                    <div class="building-item" id="gold-mine">
+                        <p>Tambang Emas</p>
+                        <p>Level: <span id="gold-mine-level">0</span></p>
+                        <button onclick="upgradeBuilding('gold-mine')">Bangun/Upgrade</button>
+                    </div>
+                    <div class="building-item" id="elixir-collector">
+                        <p>Kolektor Elixir</p>
+                        <p>Level: <span id="elixir-collector-level">0</span></p>
+                        <button onclick="upgradeBuilding('elixir-collector')">Bangun/Upgrade</button>
+                    </div>
+                    <div class="building-item" id="barracks">
+                        <p>Barak Pasukan</p>
+                        <p>Level: <span id="barracks-level">0</span></p>
+                        <button onclick="upgradeBuilding('barracks')">Bangun/Upgrade</button>
+                    </div>
+                </div>
+            </div>
+            <div class="column">
+                <h2>Latih & Serang</h2>
+                <div class="troop-item">
+                    <p>Praetorian 🛡️</p>
+                    <p>Biaya: 10💧</p>
+                    <button onclick="trainTroop()">Latih Pasukan</button>
+                </div>
+                <div class="actions">
+                    <button id="attack-button" onclick="attackEnemy()">Serang Musuh</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <div class="log" id="game-log"></div>
+        </div>
+    </div>
+
+    <script>
+        const goldEl = document.getElementById('gold');
+        const elixirEl = document.getElementById('elixir');
+        const trophiesEl = document.getElementById('trophies');
+        const troopsEl = document.getElementById('troops');
+        const troopCapacityEl = document.getElementById('troop-capacity');
+        const townhallLevelEl = document.getElementById('townhall-level');
+        const goldMineLevelEl = document.getElementById('gold-mine-level');
+        const elixirCollectorLevelEl = document.getElementById('elixir-collector-level');
+        const barracksLevelEl = document.getElementById('barracks-level');
+        const gameLogEl = document.getElementById('game-log');
+
+        let resources = { gold: 0, elixir: 0, trophies: 0, troops: 0 };
+        let buildings = {
+            townhall: { level: 1, cost: { gold: 100 } },
+            goldMine: { level: 0, cost: { gold: 20, elixir: 10 } },
+            elixirCollector: { level: 0, cost: { gold: 15, elixir: 25 } },
+            barracks: { level: 0, cost: { gold: 30, elixir: 20 } }
+        };
+
+        const troopStats = {
+            cost: 10,
+            strength: 5
+        };
+        const capacities = {
+            troops: 5
+        };
+
+        window.upgradeBuilding = upgradeBuilding;
+        window.trainTroop = trainTroop;
+        window.attackEnemy = attackEnemy;
+
+        function log(message) {
+            const p = document.createElement('p');
+            p.textContent = message;
+            gameLogEl.appendChild(p);
+            gameLogEl.scrollTop = gameLogEl.scrollHeight;
+        }
+
+        function updateUI() {
+            goldEl.textContent = resources.gold;
+            elixirEl.textContent = resources.elixir;
+            trophiesEl.textContent = resources.trophies;
+            troopsEl.textContent = resources.troops;
+            troopCapacityEl.textContent = capacities.troops;
+            townhallLevelEl.textContent = buildings.townhall.level;
+            goldMineLevelEl.textContent = buildings.goldMine.level;
+            elixirCollectorLevelEl.textContent = buildings.elixirCollector.level;
+            barracksLevelEl.textContent = buildings.barracks.level;
+        }
+
+        function upgradeBuilding(buildingName) {
+            const building = buildings[buildingName];
+            const cost = building.cost;
+
+            if (resources.gold >= cost.gold && resources.elixir >= cost.elixir) {
+                resources.gold -= cost.gold;
+                resources.elixir -= cost.elixir;
+                building.level++;
+
+                // Naikkan biaya upgrade
+                cost.gold = Math.floor(cost.gold * 1.5);
+                cost.elixir = Math.floor(cost.elixir * 1.5);
+
+                // Tambah kapasitas/produksi
+                if (buildingName === 'barracks') {
+                    capacities.troops += 5;
+                    log("Barak ditingkatkan! Kapasitas pasukan bertambah.");
+                } else if (buildingName === 'townhall') {
+                    log("Bangunan Pusat ditingkatkan! Membuka potensi baru.");
+                }
+                log(`Berhasil meng-upgrade ${buildingName}!`);
+            } else {
+                log(`Tidak cukup sumber daya untuk meng-upgrade ${buildingName}!`);
+            }
+            updateUI();
+        }
+
+        function trainTroop() {
+            if (resources.troops < capacities.troops) {
+                if (resources.elixir >= troopStats.cost) {
+                    resources.elixir -= troopStats.cost;
+                    resources.troops++;
+                    log("Pasukan baru dilatih!");
+                } else {
+                    log("Tidak cukup elixir untuk melatih pasukan.");
+                }
+            } else {
+                log("Kapasitas pasukan penuh! Tingkatkan barak Anda.");
+            }
+            updateUI();
+        }
+
+        function attackEnemy() {
+            if (resources.troops === 0) {
+                log("Anda tidak punya pasukan! Latih beberapa tentara.");
+                return;
+            }
+
+            const enemyBase = {
+                defense: Math.floor(Math.random() * (buildings.townhall.level * 10)) + 1,
+                lootGold: Math.floor(Math.random() * 50) + 10,
+                lootElixir: Math.floor(Math.random() * 50) + 10,
+                trophies: 20
+            };
+
+            const attackStrength = resources.troops * troopStats.strength;
+            log(`Meluncurkan serangan dengan ${resources.troops} pasukan...`);
+
+            if (attackStrength > enemyBase.defense) {
+                log(`Kemenangan! Anda berhasil menghancurkan basis musuh.`);
+                resources.gold += enemyBase.lootGold;
+                resources.elixir += enemyBase.lootElixir;
+                resources.trophies += enemyBase.trophies;
+                resources.troops = 0; // Pasukan habis setelah menyerang
+                log(`Anda mendapatkan ${enemyBase.lootGold} emas, ${enemyBase.lootElixir} elixir, dan ${enemyBase.trophies} trofi!`);
+            } else {
+                log("Serangan gagal! Pertahanan musuh terlalu kuat.");
+                resources.troops = 0; // Pasukan habis
+                resources.trophies = Math.max(0, resources.trophies - 10);
+                log("Anda kehilangan 10 trofi.");
+            }
+            updateUI();
+        }
+
+        function generateResources() {
+            resources.gold += buildings.goldMine.level * 2;
+            resources.elixir += buildings.elixirCollector.level * 2;
+            updateUI();
+        }
+
+        setInterval(generateResources, 2000); // Setiap 2 detik
+        log("Selamat datang di Clash of Clans: Versi Solo. Bangun, Latih, Serang!");
+        updateUI();
+    </script>
+</body>
+</html>
