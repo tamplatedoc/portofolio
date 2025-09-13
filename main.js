@@ -1,3 +1,9 @@
+// main.js
+
+// Impor Three.js dan OrbitControls
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+
 // ====== SETUP GAME UTAMA =======
 let resources = { beras: 0, jagung: 0, gandum: 0 };
 let plots = { beras: 1, jagung: 1, gandum: 0 };
@@ -22,7 +28,6 @@ const upgradeCost = {
     level1: { beras: 10, jagung: 10 }
 };
 
-// PETA KORDINAT UNTUK PETAK
 const plotPositions = [];
 for (let i = 0; i < 5; i++) {
     for (let j = 0; j < 5; j++) {
@@ -32,6 +37,9 @@ for (let i = 0; i < 5; i++) {
 let plotCounter = 0;
 
 // ====== LOGIKA GAME =======
+window.buyPlot = buyPlot;
+window.upgradeTownHall = upgradeTownHall;
+
 function updateUI() {
     elements.berasCount.textContent = resources.beras;
     elements.jagungCount.textContent = resources.jagung;
@@ -98,8 +106,9 @@ function upgradeTownHall() {
 // ====== SETUP 3D DENGAN THREE.JS =======
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas') });
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true; // Mengaktifkan bayangan
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -108,22 +117,21 @@ controls.maxDistance = 20;
 controls.minPolarAngle = Math.PI / 4;
 controls.maxPolarAngle = Math.PI / 2;
 
-// Menambahkan lampu untuk menerangi scene
-const light = new THREE.AmbientLight(0x404040); 
-scene.add(light);
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(5, 10, 5);
-scene.add(directionalLight);
+const ambientLight = new THREE.AmbientLight(0x404040, 2);
+scene.add(ambientLight);
 
-// ---- Objek 3D Latar Belakang: Tanah Kosong ----
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+directionalLight.position.set(5, 10, 5);
+directionalLight.castShadow = true;
+scene.add(directionalLight); 
+
 const groundGeometry = new THREE.PlaneGeometry(25, 25);
 const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
 const ground = new THREE.Mesh(groundGeometry, groundMaterial);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
-scene.add(ground); 
+scene.add(ground);
 
-// ---- Fungsi untuk membuat model 3D tanaman ----
 function createRiceModel() {
     const ricePlant = new THREE.Group();
     const stalk = new THREE.Mesh(
@@ -131,6 +139,7 @@ function createRiceModel() {
         new THREE.MeshLambertMaterial({ color: 0x64814d })
     );
     stalk.position.y = 0.5;
+    stalk.castShadow = true;
     ricePlant.add(stalk);
     return ricePlant;
 }
@@ -142,6 +151,7 @@ function createCornModel() {
         new THREE.MeshLambertMaterial({ color: 0x485f39 })
     );
     stalk.position.y = 0.6;
+    stalk.castShadow = true;
     cornPlant.add(stalk);
     
     const corn = new THREE.Mesh(
@@ -150,11 +160,11 @@ function createCornModel() {
     );
     corn.position.y = 0.8;
     corn.rotation.x = Math.PI / 2;
+    corn.castShadow = true;
     cornPlant.add(corn);
     return cornPlant;
 }
 
-// ---- Fungsi untuk menambahkan petak 3D baru ----
 function add3DPlot(type) {
     let plot;
     if (type === 'beras') {
@@ -178,22 +188,18 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// ====== INISIALISASI GAME =======
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Tambahkan petak awal
 add3DPlot('jagung');
 add3DPlot('beras');
 
-// Atur posisi kamera awal
 camera.position.set(0, 10, 5);
 camera.lookAt(0, 0, 0);
 
-// Mulai game
-setInterval(harvest, 60000); // 1 menit
+setInterval(harvest, 60000); 
 animate();
 updateUI();
