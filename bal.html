@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Race & Paint — Balapan Mobil (ganti warna saat menang)</title>
+<style>
+  :root{--bg:#071224;--panel:#0e2a3a;--accent:#ff6b35}
+  *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#e6f7ff}
+  body{margin:0;background:linear-gradient(#04202b,#071224);display:flex;align-items:center;justify-content:center;height:100vh}
+  .wrap{width:100%;max-width:1000px;padding:12px}
+  canvas{display:block;width:100%;height:auto;border-radius:8px;background:#1b3a4a;box-shadow:0 12px 30px rgba(0,0,0,.6)}
+  .hud{display:flex;justify-content:space-between;align-items:center;margin:10px 0}
+  .btn{padding:8px 10px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+  .muted{color:#9fc}
+  .picker{display:flex;gap:6px}
+  .color{width:30px;height:26px;border-radius:6px;border:2px solid rgba(255,255,255,0.08);cursor:pointer}
+  .modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#0b2a36;padding:16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+  .hidden{display:none}
+  footer{margin-top:8px;text-align:center;color:#88b}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hud">
+      <div><strong>Race & Paint</strong> — Kontrol: Arrow Up = gas, Down = rem, Left/Right = belok</div>
+      <div>
+        <button id="restart" class="btn">Restart</button>
+      </div>
+    </div>
+
+    <canvas id="c" width="960" height="540"></canvas>
+    <div style="display:flex;justify-content:space-between;margin-top:8px;color:#9fc">
+      <div>Lap: <span id="lap">0</span>/<span id="lapMax">3</span></div>
+      <div>Posisi: <span id="pos">-</span></div>
+      <div>Wins: <span id="wins">0</span></div>
+    </div>
+
+    <div id="colorModal" class="modal hidden">
+      <h3>Pilih warna mobil baru — Kamu menang!</h3>
+      <div class="picker" id="palette"></div>
+      <div style="margin-top:10px;text-align:right">
+        <button id="closeModal" class="btn">OK</button>
+      </div>
+    </div>
+
+    <footer>File single-file HTML — simpan sebagai <code>index.html</code> lalu deploy ke GitHub Pages.</footer>
+  </div>
+
+<script>
+/* Race & Paint
+ - Top-down simple racing with AI opponents
+ - Complete X laps to win. If player finishes 1st, show color picker to change car color.
+ - Save color & wins to localStorage
+ - Controls: Arrow keys
+*/
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// HUD
+const lapEl = document.getElementById('lap');
+const lapMaxEl = document.getElementById('lapMax');
+const posEl = document.getElementById('pos');
+const winsEl = document.getElementById('wins');
+
+const restartBtn = document.getElementById('restart');
+const colorModal = document.getElementById('colorModal');
+const paletteEl = document.getElementById('palette');
+const closeModal = document.getElementById('closeModal');
+
+// Game config
+const LAP_MAX = 3;
+lapMaxEl.textContent = LAP_MAX;
+
+const TRACK_RADIUS = Math.min(W,H) * 0.35;
+const CENTER = {x: W/2, y: H/2};
+
+// load saved
+let save = {color:'#ff3d00', wins:0};
+try{ const raw = localStorage.getItem('racepaint.save'); if(raw) Object.assign(save, JSON.parse(raw)); }catch(e){}
+
+winsEl.textContent = save.wins;
+
+// Colors for selection
+const colors = ['#ff3d00','#ffb300','#00b894','#0984e3','#6c5ce7','#d63031','#e17055','#fd79a8','#2d3436'];
+colors.forEach(c=>{ const d = document.createElement('div'); d.className='color'; d.style.background=c; d.addEventListener('click', ()=>{ player.color = c; save.color = c; localStorage.setItem('racepaint.save', JSON.stringify(save)); highlightPalette(); }); paletteEl.appendChild(d); });
+function highlightPalette(){ Array.from(paletteEl.children).forEach((el,idx)=> el.style.outline = (colors[idx]===player.color)? '3px solid rgba(255,255,255,0.3)' : 'none'); }
+
+// Player and AI cars
+function Car(x,y,angle,color,isPlayer=false){ return {x,y,angle, speed:0, maxSpeed:2.2, accel:0.06, brake:0.14, turnSpeed:0.045, color, radius:12, lap:0, dist:0, finished:false, isPlayer}; }
+
+let player = Car(CENTER.x - TRACK_RADIUS - 40, CENTER.y, 0, save.color || '#ff3d00', true);
+let aiCars = [];
+const AI_COUNT = 3;
+for(let i=0;i<AI_COUNT;i++) aiCars.push(Car(CENTER.x - TRACK_RADIUS - 40 - (i+1)*18, CENTER.y + (i+1)*18, 0, ['#ffb300','#00b894','#0984e3'][i%3] ));
+
+let cars = [player, ...aiCars];
+
+// simple track as oval, define path function param t (0..1)
+function pathAt(t){ const a = t * Math.PI * 2; const rx = TRACK_RADIUS * 1.1; const ry = TRACK_RADIUS; return {x: CENTER.x + rx*Math.cos(a), y: CENTER.y + ry*Math.sin(a), angle: a + Math.PI/2}; }
+
+// compute closest path t for a position (sampled search)
+function nearestT(px,py){ let bestT=0, bestD=1e9; const samples=400; for(let i=0;i<samples;i++){ const t=i/samples; const p=pathAt(t); const d2 = (p.x-px)*(p.x-px)+(p.y-py)*(p.y-py); if(d2 < bestD){ bestD=d2; bestT=t; } } return bestT; }
+
+// input
+const keys = {}; window.addEventListener('keydown', e=> keys[e.key] = true); window.addEventListener('keyup', e=> keys[e.key] = false);
+
+// race state
+let raceStarted = true;
+let raceFinished = false;
+let finishOrder = [];
+
+function resetRace(){ cars.forEach(c=>{ c.lap=0; c.dist=0; c.finished=false; c.speed=0; }); finishOrder = []; raceStarted = true; raceFinished = false; save.wins = save.wins || 0; localStorage.setItem('racepaint.save', JSON.stringify(save)); winsEl.textContent = save.wins; }
+
+restartBtn.addEventListener('click', ()=>{ resetRace(); });
+
+// update loop
+let last = performance.now(); function loop(now){ const dt = Math.min(0.05, (now-last)/1000); last = now; update(dt); draw(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+function update(dt){ if(raceFinished) return;
+  // player control
+  if(!player.finished){
+    if(keys['ArrowUp'] || keys['w']){ player.speed = Math.min(player.maxSpeed, player.speed + player.accel); }
+    else { player.speed = Math.max(0, player.speed - 0.02); }
+    if(keys['ArrowDown'] || keys['s']){ player.speed = Math.max(0, player.speed - player.brake); }
+    if(keys['ArrowLeft'] || keys['a']) player.angle -= player.turnSpeed * (1 + player.speed/2);
+    if(keys['ArrowRight'] || keys['d']) player.angle += player.turnSpeed * (1 + player.speed/2);
+    // move in direction
+    player.x += Math.cos(player.angle) * player.speed * 60 * dt;
+    player.y += Math.sin(player.angle) * player.speed * 60 * dt;
+  }
+
+  // AI simple: follow path by t; increment t based on own desired speed
+  aiCars.forEach((ai, idx)=>{
+    if(ai.finished) return;
+    // find nearest t on path and increment slightly; speed depends on player to make it fair
+    const t = nearestT(ai.x, ai.y);
+    const targetT = (t + 0.0025 + idx*0.0006 + Math.random()*0.0008) % 1.0;
+    const p = pathAt(targetT);
+    // steer toward p
+    const angTo = Math.atan2(p.y - ai.y, p.x - ai.x);
+    let da = angTo - ai.angle; while(da > Math.PI) da -= Math.PI*2; while(da < -Math.PI) da += Math.PI*2;
+    ai.angle += Math.sign(da) * Math.min(Math.abs(da), ai.turnSpeed*1.2);
+    // speed control
+    ai.speed += 0.02; ai.speed = Math.min(ai.maxSpeed * (1 + 0.05*idx), ai.speed);
+    ai.x += Math.cos(ai.angle) * ai.speed * 60 * dt;
+    ai.y += Math.sin(ai.angle) * ai.speed * 60 * dt;
+  });
+
+  // update laps & distances
+  cars.forEach(c=>{
+    const t = nearestT(c.x, c.y);
+    // approximate total distance = laps + t
+    const total = c.lap + t;
+    c.dist = total;
+    // detect crossing start line (t near 0)
+    if(t < 0.05){ // near start
+      if(!c._lastNearStart) c._lastNearStart = true; else {
+        // prevent multiple trigger
+      }
+    } else { if(c._lastNearStart){ // just left start
+        c._lastNearStart = false;
+        // increment lap only when passing after some progress
+        c.lap = Math.min(LAP_MAX, c.lap + 1);
+        if(c.lap >= LAP_MAX && !c.finished){ c.finished = true; finishOrder.push(c); if(finishOrder.length === cars.length){ raceFinished = true; onRaceEnd(); } }
+      }}
+  });
+
+  // determine player position by sorting dist desc
+  const order = cars.slice().sort((a,b)=> b.dist - a.dist);
+  const pos = order.indexOf(player) + 1; posEl.textContent = pos;
+  lapEl.textContent = Math.min(LAP_MAX, player.lap) + (player.finished ? ' (fin)' : '');
+}
+
+function onRaceEnd(){
+  // check if player finished 1st
+  if(finishOrder[0] === player){ // win
+    save.wins = (save.wins || 0) + 1; localStorage.setItem('racepaint.save', JSON.stringify(save)); winsEl.textContent = save.wins;
+    // show color modal
+    colorModal.classList.remove('hidden'); highlightPalette();
+  } else {
+    alert('Race selesai. Kamu tidak menang. Posisi: '+(finishOrder.indexOf(player)+1));
+  }
+}
+
+closeModal.addEventListener('click', ()=>{ colorModal.classList.add('hidden'); resetRace(); });
+
+// draw
+function draw(){ ctx.clearRect(0,0,W,H);
+  // background
+  ctx.fillStyle = '#083242'; ctx.fillRect(0,0,W,H);
+  // draw track - oval ring
+  ctx.save(); ctx.translate(CENTER.x, CENTER.y);
+  ctx.fillStyle = '#2a6b7b'; ctx.beginPath(); ctx.ellipse(0,0, TRACK_RADIUS*1.3, TRACK_RADIUS*1.0, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#0e3a49'; ctx.beginPath(); ctx.ellipse(0,0, TRACK_RADIUS*0.6, TRACK_RADIUS*0.35, 0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // track markings - start line
+  const startP = pathAt(0);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(startP.x - 6, startP.y - 60); ctx.lineTo(startP.x - 6, startP.y + 60); ctx.stroke(); ctx.beginPath(); ctx.moveTo(startP.x + 6, startP.y - 60); ctx.lineTo(startP.x + 6, startP.y + 60); ctx.stroke();
+
+  // draw cars sorted by y for simple depth
+  cars.slice().sort((a,b)=> a.y - b.y).forEach(c=> drawCar(c));
+}
+
+function drawCar(c){ ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.angle);
+  // body
+  ctx.fillStyle = c.color; ctx.fillRect(-18, -12, 36, 24);
+  // windows
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(-6, -10, 12, 10);
+  // wheels
+  ctx.fillStyle = '#111'; ctx.fillRect(-14, 12, 8, 4); ctx.fillRect(6, 12, 8,4); ctx.fillRect(-14, -16, 8,4); ctx.fillRect(6,-16,8,4);
+  ctx.restore();
+}
+
+// init highlight
+highlightPalette();
+
+</script>
+</body>
+</html>
